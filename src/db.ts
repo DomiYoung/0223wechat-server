@@ -36,6 +36,11 @@ export async function initDB() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='管理员'
     `);
 
+    // 确保 admin 表有 is_active 列（兼容旧数据库）
+    try {
+        await db.execute(`ALTER TABLE admin ADD COLUMN is_active TINYINT(1) DEFAULT 1 COMMENT '是否启用' AFTER role`);
+    } catch (_) { /* 列已存在则忽略 */ }
+
     // 2. config — 全局配置 KV
     await db.execute(`
         CREATE TABLE IF NOT EXISTS config (
