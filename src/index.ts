@@ -732,13 +732,15 @@ app.post('/api/upload', authMiddleware, async (c) => {
         const ext = path.extname(file.name) || '.jpg';
         const fileName = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
 
-        let buffer = Buffer.from(await file.arrayBuffer());
-        if (buffer.length === 0 && typeof file.stream === 'function') {
+        let buffer: Buffer;
+        if (typeof file.stream === 'function') {
             const chunks = [];
             for await (const chunk of file.stream() as any) {
                 chunks.push(Buffer.from(chunk));
             }
             buffer = Buffer.concat(chunks);
+        } else {
+            buffer = Buffer.from(await file.arrayBuffer());
         }
 
         const result = await ossClient.put(fileName, buffer);
