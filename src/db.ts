@@ -91,7 +91,8 @@ export async function initDB() {
             id INT AUTO_INCREMENT PRIMARY KEY,
             title VARCHAR(100) NOT NULL COMMENT '主题名称',
             tag VARCHAR(50) DEFAULT '' COMMENT '价格标签',
-            style VARCHAR(50) DEFAULT '' COMMENT '风格标签',
+            hall_name VARCHAR(100) DEFAULT '' COMMENT '展厅名称',
+            style VARCHAR(50) DEFAULT '' COMMENT '旧字段(兼容): 风格/展厅',
             wedding_date VARCHAR(50) DEFAULT '' COMMENT '婚礼日期',
             shop_label VARCHAR(50) DEFAULT '' COMMENT '原始数据标识',
             description TEXT COMMENT '详细描述',
@@ -109,6 +110,20 @@ export async function initDB() {
             FOREIGN KEY fk_venue (venue_id) REFERENCES venue(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='婚礼主题'
     `);
+
+    // 确保 wedding_case 表有 hall_name 列（兼容旧数据库）
+    try {
+        await db.execute(`ALTER TABLE wedding_case ADD COLUMN hall_name VARCHAR(100) DEFAULT '' COMMENT '展厅名称' AFTER tag`);
+    } catch (_) { /* 列已存在则忽略 */ }
+
+    // 数据回填：hall_name 为空时，用旧 style 补齐
+    await db.execute(
+        `UPDATE wedding_case
+         SET hall_name = style
+         WHERE (hall_name IS NULL OR hall_name = '')
+           AND style IS NOT NULL
+           AND style <> ''`
+    );
 
     // 6. case_image — 主题详情图集
     await db.execute(`
