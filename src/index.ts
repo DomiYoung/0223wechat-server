@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import OSS from 'ali-oss';
-import { queryThemes, toPublicTheme, toAdminTheme } from './services/theme.service.js';
+import { queryThemes, toPublicTheme, toPublicThemeDetail, toAdminTheme } from './services/theme.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = new Hono();
@@ -850,11 +850,13 @@ app.get('/api/themes/:id', async (c) => {
     try {
         const id = c.req.param('id');
         const [rows] = await pool.execute(
-            `SELECT wc.*, v.name AS venue_name, COALESCE(cv.name, v.city) AS venue_city
+            `SELECT wc.*,
+                    COALESCE(NULLIF(wc.hall_name, ''), wc.style) AS hall_name,
+                    v.name AS venue_name, COALESCE(cv.name, v.city) AS venue_city
              FROM wedding_case wc
              LEFT JOIN venue v ON wc.venue_id = v.id
              LEFT JOIN city cv ON v.city_id = cv.id
-             WHERE wc.id = ?`,
+             WHERE wc.id = ? AND wc.is_active = 1`,
             [id]
         ) as any;
 
@@ -863,7 +865,6 @@ app.get('/api/themes/:id', async (c) => {
         }
 
         const themeData = rows[0];
-        themeData.style = themeData.hall_name || themeData.style || '';
 
         // 获取图片列表
         const [images] = await pool.execute(
@@ -873,7 +874,7 @@ app.get('/api/themes/:id', async (c) => {
 
         themeData.images = images;
 
-        return c.json({ code: 0, data: themeData });
+        return c.json({ code: 0, data: toPublicThemeDetail(themeData) });
     } catch (err: any) {
         return c.json({ error: err.message }, 500);
     }

@@ -154,6 +154,25 @@ export function toPublicTheme(row: ThemeRow) {
   };
 }
 
+export function toPublicThemeDetail(row: ThemeRow) {
+  return {
+    id: row.id,
+    title: row.title,
+    tag: row.tag,
+    cover_url: row.cover_url,
+    style: row.hall_name || row.style || '',
+    description: row.description,
+    wedding_date: row.wedding_date,
+    venue_name: row.venue_name,
+    venue_city: row.venue_city,
+    images: (row.images || []).map((img: any) => ({
+      id: img.id,
+      image_url: img.image_url,
+      sort_order: img.sort_order,
+    })),
+  };
+}
+
 export function toAdminTheme(row: ThemeRow) {
   return {
     ...row,
