@@ -726,24 +726,29 @@ app.post('/api/upload', authMiddleware, async (c) => {
     try {
         const body = await c.req.parseBody();
         const file = body['file'];
-        if (!file || typeof file === 'string') {
+        if (!file || typeof file === 'string' || !(file instanceof File)) {
             return c.json({ error: '请选择文件' }, 400);
         }
-        const ext = path.extname(file.name) || '.jpg';
-        const fileName = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
-
-        let buffer: Buffer;
-        if (typeof file.stream === 'function') {
-            const chunks = [];
-            for await (const chunk of file.stream() as any) {
-                chunks.push(Buffer.from(chunk));
-            }
-            buffer = Buffer.concat(chunks);
-        } else {
-            buffer = Buffer.from(await file.arrayBuffer());
+        if (file.size <= 0) {
+            return c.json({ error: '上传文件为空（0B），请重新选择图片' }, 400);
         }
 
-        const result = await ossClient.put(fileName, buffer);
+        const ext = path.extname(file.name) || '.jpg';
+        const fileName = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+        const buffer = Buffer.from(await file.arrayBuffer());
+        if (buffer.length <= 0) {
+            return c.json({ error: '读取上传文件失败（0B），请重试' }, 400);
+        }
+
+        const result = await ossClient.put(fileName, buffer, {
+            headers: {
+                'Content-Type': file.type || 'application/octet-stream',
+                'Content-Disposition': 'inline',
+            },
+        });
+        if (!result?.url) {
+            return c.json({ error: '上传成功但未获取到文件地址' }, 500);
+        }
         const secureUrl = result.url.replace('http://', 'https://');
 
         return c.json({ code: 0, data: { url: secureUrl } });
