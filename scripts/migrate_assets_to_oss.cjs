@@ -3,7 +3,7 @@ const OSS = require('ali-oss');
 const dotenv = require('dotenv');
 const path = require('path');
 
-dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 console.log('OSS Bucket:', process.env.ALIYUN_OSS_BUCKET);
 
