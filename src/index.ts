@@ -6,11 +6,19 @@ import pool, { initDB } from './db.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import OSS from 'ali-oss';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = new Hono();
 
 app.use('*', cors());
+
+const ossClient = new OSS({
+    region: process.env.ALIYUN_OSS_REGION || 'oss-cn-shanghai',
+    accessKeyId: process.env.ALIYUN_OSS_ACCESS_KEY_ID || '',
+    accessKeySecret: process.env.ALIYUN_OSS_ACCESS_KEY_SECRET || '',
+    bucket: process.env.ALIYUN_OSS_BUCKET || 'creativepro'
+});
 
 // ============================================================
 // 静态文件 & 上传目录
@@ -712,20 +720,31 @@ app.get('/api/themes', async (c) => {
 });
 
 // ============================================================
-// 文件上传（TODO: 迁移到 ali-oss）
+// 文件上传（ali-oss）
 // ============================================================
-app.post('/api/admin/upload', authMiddleware, async (c) => {
+app.post('/api/upload', authMiddleware, async (c) => {
     try {
         const body = await c.req.parseBody();
         const file = body['file'];
         if (!file || typeof file === 'string') {
             return c.json({ error: '请选择文件' }, 400);
         }
-        const fileName = `${Date.now()}-${file.name}`;
-        const filePath = path.join(uploadDir, fileName);
-        const buffer = await file.arrayBuffer();
-        fs.writeFileSync(filePath, Buffer.from(buffer));
-        return c.json({ code: 0, data: { url: `/uploads/${fileName}` } });
+        const ext = path.extname(file.name) || '.jpg';
+        const fileName = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+
+        let buffer = Buffer.from(await file.arrayBuffer());
+        if (buffer.length === 0 && typeof file.stream === 'function') {
+            const chunks = [];
+            for await (const chunk of file.stream() as any) {
+                chunks.push(Buffer.from(chunk));
+            }
+            buffer = Buffer.concat(chunks);
+        }
+
+        const result = await ossClient.put(fileName, buffer);
+        const secureUrl = result.url.replace('http://', 'https://');
+
+        return c.json({ code: 0, data: { url: secureUrl } });
     } catch (err: any) {
         return c.json({ error: err.message }, 500);
     }

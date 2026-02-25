@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import mysql from 'mysql2/promise';
 
 const pool = mysql.createPool({
@@ -257,7 +258,7 @@ async function migrateCityData(db: mysql.Pool) {
 
     // 5. 回填 venue.city_id
     for (const [name, id] of cityMap) {
-        await db.execute(
+        await (db as any).execute(
             'UPDATE venue SET city_id = ? WHERE city = ? AND city_id IS NULL',
             [id, name]
         );
@@ -265,7 +266,7 @@ async function migrateCityData(db: mysql.Pool) {
 
     // 6. 回填 reservation.city_id
     for (const [name, id] of cityMap) {
-        await db.execute(
+        await (db as any).execute(
             'UPDATE reservation SET city_id = ? WHERE city = ? AND city_id IS NULL',
             [id, name]
         );

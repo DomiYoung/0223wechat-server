@@ -67,3 +67,8 @@ node update_db.js
 - No repository-level unit/integration/e2e test workflow is configured.
 - No dedicated single-test command is available.
 - Admin auth is currently thin: login returns a generated token string, and admin routes do not show centralized auth middleware in `src/index.ts`.
+
+## Deployment & CI/CD Practices (CRITICAL)
+- **Deployment Protocol**: **NEVER USE `scp`** for copying build outputs (`dist`) cross-server. It introduces immense overhead and network slicing issues for granular files.
+- **Rsync Only**: To deploy manually, always use `rsync -avz --delete` for instant, incremental, differential transfers of bundled files.
+- **CI/CD Future Path**: As this project is structured for GitHub, upcoming configurations will route all deployments via GitHub Actions (`.github/workflows`). This eliminates manual terminal execution, records versions per commit, and allows instantly rolling back to a previous `dist` via container tags or previous Git commit actions.
