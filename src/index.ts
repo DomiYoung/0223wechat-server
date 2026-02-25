@@ -61,6 +61,118 @@ function paginatedResponse(list: any[], total: number, page: number, pageSize: n
     };
 }
 
+type CityInfo = { id: number | null; name: string };
+
+function parsePositiveInt(value: unknown): number | null {
+    const raw = typeof value === 'string' ? value.trim() : value;
+    if (raw === '' || raw === null || raw === undefined) return null;
+    const parsed = typeof raw === 'number' ? raw : Number.parseInt(String(raw), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+}
+
+function normalizeCityName(value: unknown): string {
+    if (typeof value !== 'string') return '';
+    return value.trim();
+}
+
+async function getCityById(cityId: number): Promise<CityInfo | null> {
+    const [rows] = await pool.execute(
+        'SELECT id, name FROM city WHERE id = ? LIMIT 1',
+        [cityId]
+    ) as any;
+    if (!rows[0]) return null;
+    return { id: rows[0].id, name: rows[0].name };
+}
+
+async function getCityByName(cityName: string): Promise<CityInfo | null> {
+    const [rows] = await pool.execute(
+        'SELECT id, name FROM city WHERE name = ? LIMIT 1',
+        [cityName]
+    ) as any;
+    if (!rows[0]) return null;
+    return { id: rows[0].id, name: rows[0].name };
+}
+
+async function getOrCreateCityByName(cityName: string): Promise<CityInfo | null> {
+    await pool.execute(
+        'INSERT IGNORE INTO city (name) VALUES (?)',
+        [cityName]
+    );
+    return getCityByName(cityName);
+}
+
+async function resolveCityInfo(
+    cityIdInput: unknown,
+    cityNameInput: unknown,
+    autoCreateByName = false
+): Promise<CityInfo> {
+    const cityId = parsePositiveInt(cityIdInput);
+    if (cityId) {
+        const cityById = await getCityById(cityId);
+        if (cityById) return cityById;
+        return { id: null, name: '' };
+    }
+
+    const cityName = normalizeCityName(cityNameInput);
+    if (!cityName) return { id: null, name: '' };
+
+    const cityByName = await getCityByName(cityName);
+    if (cityByName) return cityByName;
+
+    if (autoCreateByName) {
+        const created = await getOrCreateCityByName(cityName);
+        if (created) return created;
+    }
+
+    return { id: null, name: cityName };
+}
+
+async function resolveCityFilter(
+    cityIdInput: string | undefined,
+    cityInput: string | undefined
+): Promise<{ hasFilter: boolean; cityId: number | null }> {
+    const cityId = parsePositiveInt(cityIdInput);
+    if (cityId) return { hasFilter: true, cityId };
+
+    const cityName = normalizeCityName(cityInput);
+    if (!cityName || cityName === 'all') return { hasFilter: false, cityId: null };
+
+    const cityFromName = await getCityByName(cityName);
+    if (cityFromName?.id) return { hasFilter: true, cityId: cityFromName.id };
+
+    const cityIdFromCityQuery = parsePositiveInt(cityName);
+    if (cityIdFromCityQuery) return { hasFilter: true, cityId: cityIdFromCityQuery };
+
+    return { hasFilter: true, cityId: null };
+}
+
+async function resolveVenueCityInfo(venueIdInput: unknown): Promise<CityInfo> {
+    const venueId = parsePositiveInt(venueIdInput);
+    if (!venueId) return { id: null, name: '' };
+
+    const [rows] = await pool.execute(
+        `SELECT v.city_id, COALESCE(c.name, v.city, '') AS city_name
+         FROM venue v
+         LEFT JOIN city c ON v.city_id = c.id
+         WHERE v.id = ? LIMIT 1`,
+        [venueId]
+    ) as any;
+
+    if (!rows[0]) return { id: null, name: '' };
+    return {
+        id: parsePositiveInt(rows[0].city_id),
+        name: rows[0].city_name || '',
+    };
+}
+
+function resolveHallNameInput(payload: Record<string, any>): string {
+    const hallName = typeof payload.hall_name === 'string' ? payload.hall_name.trim() : '';
+    if (hallName) return hallName;
+    const style = typeof payload.style === 'string' ? payload.style.trim() : '';
+    return style;
+}
+
 // ============================================================
 // 认证中间件
 // ============================================================
@@ -186,26 +298,39 @@ app.delete('/api/admin/cities/:id', authMiddleware, async (c) => {
 app.get('/api/admin/venues', authMiddleware, async (c) => {
     try {
         const { page, pageSize, offset } = parsePagination(c.req.query());
-        const city = c.req.query('city');
+        const cityFilter = await resolveCityFilter(
+            c.req.query('cityId'),
+            c.req.query('city')
+        );
+        if (cityFilter.hasFilter && !cityFilter.cityId) {
+            return c.json(paginatedResponse([], 0, page, pageSize));
+        }
 
         const conditions: string[] = [];
         const params: any[] = [];
 
-        if (city && city !== 'all') {
-            conditions.push('city = ?');
-            params.push(city);
+        if (cityFilter.hasFilter && cityFilter.cityId) {
+            conditions.push('v.city_id = ?');
+            params.push(cityFilter.cityId);
         }
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
         const [countResult] = await pool.execute(
-            `SELECT COUNT(*) as total FROM venue ${whereClause}`,
+            `SELECT COUNT(*) as total FROM venue v ${whereClause}`,
             params
         ) as any;
         const total = countResult[0].total;
 
         const [rows] = await pool.execute(
-            `SELECT * FROM venue ${whereClause} ORDER BY id DESC LIMIT ? OFFSET ?`,
+            `SELECT
+                v.id, v.name, v.city_id, COALESCE(c.name, v.city) AS city,
+                v.address, v.phone, v.cover_url, v.business_hours, v.is_active,
+                v.lat, v.lng, v.created_at
+             FROM venue v
+             LEFT JOIN city c ON v.city_id = c.id
+             ${whereClause}
+             ORDER BY v.id DESC LIMIT ? OFFSET ?`,
             [...params, pageSize, offset]
         ) as any;
 
@@ -219,13 +344,29 @@ app.get('/api/admin/venues', authMiddleware, async (c) => {
 app.post('/api/admin/venues', authMiddleware, async (c) => {
     try {
         const body = await c.req.json();
-        const { name, city, address, phone, cover_url, business_hours, is_active, lat, lng } = body;
+        const { name, city, city_id, address, phone, cover_url, business_hours, is_active, lat, lng } = body;
         if (!name) return c.json({ error: '门店名称不能为空' }, 400);
 
+        const cityInfo = await resolveCityInfo(city_id, city, false);
+        if ((city_id || city) && !cityInfo.id) {
+            return c.json({ error: '城市不存在，请先在城市管理中创建' }, 400);
+        }
+
         const [result] = await pool.execute(
-            `INSERT INTO venue (name, city, address, phone, cover_url, business_hours, is_active, lat, lng)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [name, city || '', address || '', phone || '', cover_url || '', business_hours || '', is_active ?? 1, lat || null, lng || null]
+            `INSERT INTO venue (name, city, city_id, address, phone, cover_url, business_hours, is_active, lat, lng)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                name,
+                cityInfo.name || '',
+                cityInfo.id,
+                address || '',
+                phone || '',
+                cover_url || '',
+                business_hours || '',
+                is_active ?? 1,
+                lat || null,
+                lng || null,
+            ]
         ) as any;
 
         return c.json({ code: 0, data: { id: result.insertId } });
@@ -238,11 +379,28 @@ app.post('/api/admin/venues', authMiddleware, async (c) => {
 app.put('/api/admin/venues/:id', authMiddleware, async (c) => {
     try {
         const body = await c.req.json();
-        const { name, city, address, phone, cover_url, business_hours, is_active, lat, lng } = body;
+        const { name, city, city_id, address, phone, cover_url, business_hours, is_active, lat, lng } = body;
+        const cityInfo = await resolveCityInfo(city_id, city, false);
+        if ((city_id || city) && !cityInfo.id) {
+            return c.json({ error: '城市不存在，请先在城市管理中创建' }, 400);
+        }
+
         await pool.execute(
-            `UPDATE venue SET name=?, city=?, address=?, phone=?, cover_url=?, business_hours=?, is_active=?, lat=?, lng=?
+            `UPDATE venue SET name=?, city=?, city_id=?, address=?, phone=?, cover_url=?, business_hours=?, is_active=?, lat=?, lng=?
              WHERE id=?`,
-            [name, city || '', address || '', phone || '', cover_url || '', business_hours || '', is_active ?? 1, lat || null, lng || null, c.req.param('id')]
+            [
+                name,
+                cityInfo.name || '',
+                cityInfo.id,
+                address || '',
+                phone || '',
+                cover_url || '',
+                business_hours || '',
+                is_active ?? 1,
+                lat || null,
+                lng || null,
+                c.req.param('id'),
+            ]
         );
         return c.json({ code: 0 });
     } catch (err: any) {
@@ -286,6 +444,7 @@ app.get('/api/admin/themes', authMiddleware, async (c) => {
         const query = c.req.query();
         const { page, pageSize, offset } = parsePagination(query);
         const city = query.city;
+        const cityId = query.cityId;
         const venueId = query.venueId;
         const keyword = query.keyword;
         const featured = query.featured;
@@ -295,16 +454,20 @@ app.get('/api/admin/themes', authMiddleware, async (c) => {
         const conditions: string[] = [];
         const params: any[] = [];
 
-        if (city && city !== 'all') {
-            conditions.push('v.city = ?');
-            params.push(city);
+        const cityFilter = await resolveCityFilter(cityId, city);
+        if (cityFilter.hasFilter && !cityFilter.cityId) {
+            return c.json(paginatedResponse([], 0, page, pageSize));
+        }
+        if (cityFilter.hasFilter && cityFilter.cityId) {
+            conditions.push('v.city_id = ?');
+            params.push(cityFilter.cityId);
         }
         if (venueId) {
             conditions.push('wc.venue_id = ?');
             params.push(parseInt(venueId));
         }
         if (keyword) {
-            conditions.push('(wc.title LIKE CONCAT(\'%\', ?, \'%\') OR wc.style LIKE CONCAT(\'%\', ?, \'%\'))');
+            conditions.push('(wc.title LIKE CONCAT(\'%\', ?, \'%\') OR COALESCE(NULLIF(wc.hall_name, \'\'), wc.style) LIKE CONCAT(\'%\', ?, \'%\'))');
             params.push(keyword, keyword);
         }
         if (featured !== undefined && featured !== '') {
@@ -334,8 +497,9 @@ app.get('/api/admin/themes', authMiddleware, async (c) => {
         const [rows] = await pool.execute(
             `SELECT
                 wc.*,
+                COALESCE(NULLIF(wc.hall_name, ''), wc.style) AS hall_name,
                 v.name AS venue_name,
-                v.city AS venue_city,
+                COALESCE(cv.name, v.city) AS venue_city,
                 (SELECT COUNT(*) FROM case_image ci WHERE ci.case_id = wc.id) AS image_count
              FROM wedding_case wc
              INNER JOIN (
@@ -347,6 +511,7 @@ app.get('/api/admin/themes', authMiddleware, async (c) => {
                  LIMIT ? OFFSET ?
              ) AS page_ids ON wc.id = page_ids.id
              LEFT JOIN venue v ON wc.venue_id = v.id
+             LEFT JOIN city cv ON v.city_id = cv.id
              ORDER BY wc.sort_order ASC, wc.id DESC`,
             [...params, pageSize, offset]
         ) as any;
@@ -366,7 +531,14 @@ app.get('/api/admin/themes', authMiddleware, async (c) => {
                 imageMap.get(img.case_id)!.push(img);
             }
             for (const row of rows) {
+                row.hall_name = row.hall_name || row.style || '';
+                row.style = row.hall_name;
                 row.images = imageMap.get(row.id) || [];
+            }
+        } else {
+            for (const row of rows) {
+                row.hall_name = row.hall_name || row.style || '';
+                row.style = row.hall_name;
             }
         }
 
@@ -380,13 +552,14 @@ app.get('/api/admin/themes', authMiddleware, async (c) => {
 app.post('/api/admin/themes', authMiddleware, async (c) => {
     try {
         const body = await c.req.json();
-        const { title, tag, style, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active, images } = body;
+        const { title, tag, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active, images } = body;
+        const hallName = resolveHallNameInput(body);
         if (!title) return c.json({ error: '主题名称不能为空' }, 400);
 
         const [result] = await pool.execute(
-            `INSERT INTO wedding_case (title, tag, style, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [title, tag || '', style || '', wedding_date || '', shop_label || '', description || '', cover_url || '', venue_id || null, sort_order || 0, is_featured || 0, is_active ?? 1]
+            `INSERT INTO wedding_case (title, tag, hall_name, style, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [title, tag || '', hallName, hallName, wedding_date || '', shop_label || '', description || '', cover_url || '', venue_id || null, sort_order || 0, is_featured || 0, is_active ?? 1]
         ) as any;
 
         const caseId = result.insertId;
@@ -413,12 +586,13 @@ app.put('/api/admin/themes/:id', authMiddleware, async (c) => {
     try {
         const body = await c.req.json();
         const id = c.req.param('id');
-        const { title, tag, style, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active, images } = body;
+        const { title, tag, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active, images } = body;
+        const hallName = resolveHallNameInput(body);
 
         await pool.execute(
-            `UPDATE wedding_case SET title=?, tag=?, style=?, wedding_date=?, shop_label=?, description=?, cover_url=?, venue_id=?, sort_order=?, is_featured=?, is_active=?
+            `UPDATE wedding_case SET title=?, tag=?, hall_name=?, style=?, wedding_date=?, shop_label=?, description=?, cover_url=?, venue_id=?, sort_order=?, is_featured=?, is_active=?
              WHERE id=?`,
-            [title, tag || '', style || '', wedding_date || '', shop_label || '', description || '', cover_url || '', venue_id || null, sort_order || 0, is_featured || 0, is_active ?? 1, id]
+            [title, tag || '', hallName, hallName, wedding_date || '', shop_label || '', description || '', cover_url || '', venue_id || null, sort_order || 0, is_featured || 0, is_active ?? 1, id]
         );
 
         // 更新图片：先删后插（事务安全由外键 CASCADE 保证）
@@ -455,7 +629,7 @@ app.delete('/api/admin/themes/:id', authMiddleware, async (c) => {
 
 /**
  * 查询预约列表
- * 支持参数: page, pageSize, status, keyword, city
+ * 支持参数: page, pageSize, status, keyword, city/cityId
  */
 app.get('/api/admin/reservations', authMiddleware, async (c) => {
     try {
@@ -464,6 +638,7 @@ app.get('/api/admin/reservations', authMiddleware, async (c) => {
         const status = query.status;
         const keyword = query.keyword;
         const city = query.city;
+        const cityId = query.cityId;
 
         const conditions: string[] = [];
         const params: any[] = [];
@@ -476,9 +651,13 @@ app.get('/api/admin/reservations', authMiddleware, async (c) => {
             conditions.push('(r.name LIKE CONCAT(\'%\', ?, \'%\') OR r.mobile LIKE CONCAT(\'%\', ?, \'%\'))');
             params.push(keyword, keyword);
         }
-        if (city && city !== 'all') {
-            conditions.push('r.city = ?');
-            params.push(city);
+        const cityFilter = await resolveCityFilter(cityId, city);
+        if (cityFilter.hasFilter && !cityFilter.cityId) {
+            return c.json(paginatedResponse([], 0, page, pageSize));
+        }
+        if (cityFilter.hasFilter && cityFilter.cityId) {
+            conditions.push('r.city_id = ?');
+            params.push(cityFilter.cityId);
         }
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -491,7 +670,11 @@ app.get('/api/admin/reservations', authMiddleware, async (c) => {
 
         // 延迟关联：先在 idx_created 上定位 ID，再 JOIN 获取完整数据
         const [rows] = await pool.execute(
-            `SELECT r.*, v.name AS venue_name, wc.title AS case_title
+            `SELECT
+                r.*,
+                COALESCE(rc.name, r.city) AS city,
+                v.name AS venue_name,
+                wc.title AS case_title
              FROM reservation r
              INNER JOIN (
                  SELECT r2.id FROM reservation r2
@@ -499,6 +682,7 @@ app.get('/api/admin/reservations', authMiddleware, async (c) => {
                  ORDER BY r2.created_at DESC
                  LIMIT ? OFFSET ?
              ) AS page_ids ON r.id = page_ids.id
+             LEFT JOIN city rc ON r.city_id = rc.id
              LEFT JOIN venue v ON r.venue_id = v.id
              LEFT JOIN wedding_case wc ON r.case_id = wc.id
              ORDER BY r.created_at DESC`,
@@ -515,13 +699,31 @@ app.get('/api/admin/reservations', authMiddleware, async (c) => {
 app.post('/api/reservation', async (c) => {
     try {
         const body = await c.req.json();
-        const { name, mobile, wechat_openid, wedding_date, tables_count, venue_id, case_id, source, sub_platform, city } = body;
+        const { name, mobile, wechat_openid, wedding_date, tables_count, venue_id, case_id, source, sub_platform, city, city_id } = body;
         if (!name || !mobile) return c.json({ error: '姓名和手机号不能为空' }, 400);
 
+        const normalizedVenueId = parsePositiveInt(venue_id);
+        let cityInfo = await resolveCityInfo(city_id, city, true);
+        if (!cityInfo.id && normalizedVenueId) {
+            cityInfo = await resolveVenueCityInfo(normalizedVenueId);
+        }
+
         const [result] = await pool.execute(
-            `INSERT INTO reservation (name, mobile, wechat_openid, wedding_date, tables_count, venue_id, case_id, source, sub_platform, city)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [name, mobile, wechat_openid || null, wedding_date || '', tables_count || 0, venue_id || null, case_id || null, source || '小程序', sub_platform || '', city || '']
+            `INSERT INTO reservation (name, mobile, wechat_openid, wedding_date, tables_count, venue_id, case_id, source, sub_platform, city, city_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                name,
+                mobile,
+                wechat_openid || null,
+                wedding_date || '',
+                tables_count || 0,
+                normalizedVenueId,
+                case_id || null,
+                source || '小程序',
+                sub_platform || '',
+                cityInfo.name || '',
+                cityInfo.id,
+            ]
         ) as any;
 
         return c.json({ code: 0, data: { id: result.insertId } });
@@ -554,14 +756,28 @@ app.get('/api/home', async (c) => {
     try {
         // 获取推荐门店
         const [venues] = await pool.execute(
-            `SELECT id, name, city, address, cover_url FROM venue WHERE is_active = 1 ORDER BY id LIMIT 6`
+            `SELECT
+                v.id, v.name, v.city_id,
+                COALESCE(cv.name, v.city) AS city,
+                v.address, v.cover_url
+             FROM venue v
+             LEFT JOIN city cv ON v.city_id = cv.id
+             WHERE v.is_active = 1
+             ORDER BY v.id
+             LIMIT 6`
         ) as any;
 
         // 获取推荐案例
         const [cases] = await pool.execute(
-            `SELECT wc.id, wc.title, wc.cover_url, wc.style, v.name AS venue_name, v.city
+            `SELECT
+                wc.id, wc.title, wc.cover_url,
+                COALESCE(NULLIF(wc.hall_name, ''), wc.style) AS hall_name,
+                COALESCE(NULLIF(wc.hall_name, ''), wc.style) AS style,
+                v.name AS venue_name,
+                COALESCE(cv.name, v.city) AS city
              FROM wedding_case wc
              LEFT JOIN venue v ON wc.venue_id = v.id
+             LEFT JOIN city cv ON v.city_id = cv.id
              WHERE wc.is_active = 1 AND wc.is_featured = 1
              ORDER BY wc.sort_order ASC, wc.id DESC
              LIMIT 6`
@@ -576,19 +792,31 @@ app.get('/api/home', async (c) => {
 // 获取门店列表（公开，小程序首页调用）
 app.get('/api/venues', async (c) => {
     try {
-        const city = c.req.query('city');
-        const conditions: string[] = ['is_active = 1'];
+        const cityFilter = await resolveCityFilter(
+            c.req.query('cityId'),
+            c.req.query('city')
+        );
+        if (cityFilter.hasFilter && !cityFilter.cityId) {
+            return c.json({ code: 0, data: [] });
+        }
+
+        const conditions: string[] = ['v.is_active = 1'];
         const params: any[] = [];
 
-        if (city && city !== 'all') {
-            conditions.push('city = ?');
-            params.push(city);
+        if (cityFilter.hasFilter && cityFilter.cityId) {
+            conditions.push('v.city_id = ?');
+            params.push(cityFilter.cityId);
         }
 
         const whereClause = `WHERE ${conditions.join(' AND ')}`;
         const [rows] = await pool.execute(
-            `SELECT id, name, city, address, phone, cover_url, business_hours, lat, lng
-             FROM venue ${whereClause} ORDER BY city, id`,
+            `SELECT
+                v.id, v.name, v.city_id, COALESCE(cv.name, v.city) AS city,
+                v.address, v.phone, v.cover_url, v.business_hours, v.lat, v.lng
+             FROM venue v
+             LEFT JOIN city cv ON v.city_id = cv.id
+             ${whereClause}
+             ORDER BY v.city_id, v.id`,
             params
         ) as any;
 
@@ -602,12 +830,15 @@ app.get('/api/venues', async (c) => {
 app.get('/api/cases/live', async (c) => {
     try {
         const [rows] = await pool.execute(
-            `SELECT wc.id, wc.title, wc.cover_url, wc.style, wc.tag,
-                    v.name AS venue_name, v.city,
+            `SELECT wc.id, wc.title, wc.cover_url,
+                    COALESCE(NULLIF(wc.hall_name, ''), wc.style) AS hall_name,
+                    wc.tag,
+                    v.name AS venue_name, COALESCE(cv.name, v.city) AS city,
                     (SELECT GROUP_CONCAT(ci.image_url ORDER BY ci.sort_order SEPARATOR ',')
                      FROM case_image ci WHERE ci.case_id = wc.id) AS imgs
              FROM wedding_case wc
              LEFT JOIN venue v ON wc.venue_id = v.id
+             LEFT JOIN city cv ON v.city_id = cv.id
              WHERE wc.is_active = 1
              ORDER BY wc.is_featured DESC, wc.sort_order ASC, wc.id DESC
              LIMIT 50`
@@ -618,7 +849,8 @@ app.get('/api/cases/live', async (c) => {
             id: row.id,
             title: row.title,
             cover: row.cover_url,
-            style: row.style,
+            hall_name: row.hall_name,
+            style: row.hall_name,
             tag: row.tag,
             venue: row.venue_name,
             city: row.city,
@@ -636,9 +868,10 @@ app.get('/api/cases/:id', async (c) => {
     try {
         const id = c.req.param('id');
         const [rows] = await pool.execute(
-            `SELECT wc.*, v.name AS venue_name, v.city
+            `SELECT wc.*, v.name AS venue_name, COALESCE(cv.name, v.city) AS city
              FROM wedding_case wc
              LEFT JOIN venue v ON wc.venue_id = v.id
+             LEFT JOIN city cv ON v.city_id = cv.id
              WHERE wc.id = ?`,
             [id]
         ) as any;
@@ -648,6 +881,8 @@ app.get('/api/cases/:id', async (c) => {
         }
 
         const caseData = rows[0];
+        caseData.hall_name = caseData.hall_name || caseData.style || '';
+        caseData.style = caseData.hall_name;
 
         // 获取图片列表
         const [images] = await pool.execute(
@@ -663,17 +898,125 @@ app.get('/api/cases/:id', async (c) => {
     }
 });
 
+// 获取主题列表（公开，小程序首页调用）
+app.get('/api/themes', async (c) => {
+    try {
+        const cityFilter = await resolveCityFilter(
+            c.req.query('cityId'),
+            c.req.query('city')
+        );
+
+        const conditions: string[] = ['wc.is_active = 1'];
+        const params: any[] = [];
+
+        if (cityFilter.hasFilter && cityFilter.cityId) {
+            conditions.push('v.city_id = ?');
+            params.push(cityFilter.cityId);
+        }
+
+        const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+        const [rows] = await pool.execute(
+            `SELECT
+                wc.id, wc.title, wc.cover_url,
+                COALESCE(NULLIF(wc.hall_name, ''), wc.style) AS style,
+                v.name AS venue_name,
+                COALESCE(cv.name, v.city) AS venue_city
+             FROM wedding_case wc
+             LEFT JOIN venue v ON wc.venue_id = v.id
+             LEFT JOIN city cv ON v.city_id = cv.id
+             ${whereClause}
+             ORDER BY wc.sort_order ASC, wc.id DESC`,
+            params
+        ) as any;
+
+        // 批量获取图片
+        if (rows.length > 0) {
+            const caseIds = rows.map((r: any) => r.id);
+            const placeholders = caseIds.map(() => '?').join(',');
+            const [images] = await pool.execute(
+                `SELECT case_id, id, image_url, sort_order FROM case_image WHERE case_id IN (${placeholders}) ORDER BY sort_order ASC`,
+                caseIds
+            ) as any;
+
+            const imageMap = new Map<number, any[]>();
+            for (const img of images) {
+                if (!imageMap.has(img.case_id)) imageMap.set(img.case_id, []);
+                imageMap.get(img.case_id)!.push(img);
+            }
+            for (const row of rows) {
+                row.images = imageMap.get(row.id) || [];
+            }
+        }
+
+        return c.json({ code: 0, data: rows });
+    } catch (err: any) {
+        return c.json({ error: err.message }, 500);
+    }
+});
+
+// 获取单个主题详情（公开，小程序详情页调用）
+app.get('/api/themes/:id', async (c) => {
+    try {
+        const id = c.req.param('id');
+        const [rows] = await pool.execute(
+            `SELECT wc.*, v.name AS venue_name, COALESCE(cv.name, v.city) AS venue_city
+             FROM wedding_case wc
+             LEFT JOIN venue v ON wc.venue_id = v.id
+             LEFT JOIN city cv ON v.city_id = cv.id
+             WHERE wc.id = ?`,
+            [id]
+        ) as any;
+
+        if (rows.length === 0) {
+            return c.json({ error: '主题不存在' }, 404);
+        }
+
+        const themeData = rows[0];
+        themeData.style = themeData.hall_name || themeData.style || '';
+
+        // 获取图片列表
+        const [images] = await pool.execute(
+            `SELECT id, image_url, sort_order FROM case_image WHERE case_id = ? ORDER BY sort_order`,
+            [id]
+        ) as any;
+
+        themeData.images = images;
+
+        return c.json({ code: 0, data: themeData });
+    } catch (err: any) {
+        return c.json({ error: err.message }, 500);
+    }
+});
+
 // 提交预约（公开，小程序调用 /api/booking）
 app.post('/api/booking', async (c) => {
     try {
         const body = await c.req.json();
-        const { name, mobile, city, source, subPlatform, venue_id, case_id, wedding_date, tables_count } = body;
+        const { name, mobile, city, city_id, source, subPlatform, venue_id, case_id, wedding_date, tables_count } = body;
         if (!name || !mobile) return c.json({ error: '姓名和手机号不能为空' }, 400);
 
+        const normalizedVenueId = parsePositiveInt(venue_id);
+        let cityInfo = await resolveCityInfo(city_id, city, true);
+        if (!cityInfo.id && normalizedVenueId) {
+            cityInfo = await resolveVenueCityInfo(normalizedVenueId);
+        }
+
         const [result] = await pool.execute(
-            `INSERT INTO reservation (name, mobile, city, source, sub_platform, venue_id, case_id, wedding_date, tables_count)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [name, mobile, city || '', source || '小程序', subPlatform || '', venue_id || null, case_id || null, wedding_date || '', tables_count || 0]
+            `INSERT INTO reservation (name, mobile, city, city_id, source, sub_platform, venue_id, case_id, wedding_date, tables_count)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                name,
+                mobile,
+                cityInfo.name || '',
+                cityInfo.id,
+                source || '小程序',
+                subPlatform || '',
+                normalizedVenueId,
+                case_id || null,
+                wedding_date || '',
+                tables_count || 0,
+            ]
         ) as any;
 
         return c.json({ code: 0, data: { id: result.insertId } });
@@ -688,13 +1031,14 @@ app.get('/api/themes', async (c) => {
         // 一次性取出所有上线主题+门店+图片，避免 N+1 循环查询
         const [themes] = await pool.execute(
             `SELECT wc.id, wc.title, wc.cover_url, wc.sort_order,
-                    v.name AS venue_name, v.city,
+                    v.name AS venue_name, COALESCE(cv.name, v.city) AS city,
                     (SELECT GROUP_CONCAT(ci.image_url ORDER BY ci.sort_order)
                      FROM case_image ci WHERE ci.case_id = wc.id) AS image_urls
              FROM wedding_case wc
              INNER JOIN venue v ON wc.venue_id = v.id AND v.is_active = 1
+             LEFT JOIN city cv ON v.city_id = cv.id
              WHERE wc.is_active = 1
-             ORDER BY v.city, wc.sort_order ASC`
+             ORDER BY v.city_id, wc.sort_order ASC`
         ) as any;
 
         const cityMap: Record<string, string> = { '上海': 'sh', '北京': 'bj', '南京': 'nj' };
