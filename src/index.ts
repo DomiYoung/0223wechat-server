@@ -726,7 +726,7 @@ app.post('/api/upload', authMiddleware, async (c) => {
     try {
         const body = await c.req.parseBody();
         const file = body['file'];
-        if (!file || typeof file === 'string' || !(file instanceof File)) {
+        if (!file || typeof file === 'string' || typeof (file as any).arrayBuffer !== 'function') {
             return c.json({ error: '请选择文件' }, 400);
         }
         if (file.size <= 0) {
