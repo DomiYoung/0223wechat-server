@@ -38,7 +38,7 @@ jobs:
           ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
           
           # 使用 rsync 增量同步编译后的 dist 及依赖配置
-          rsync -avz --ignore-missing-args -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" package.json bun.lockb $SERVER_USER@$SERVER_HOST:/www/wwwroot/0223wechat-server/
+          rsync -avz -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" package.json bun.lock $SERVER_USER@$SERVER_HOST:/www/wwwroot/0223wechat-server/
           rsync -avz --delete -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" dist/ $SERVER_USER@$SERVER_HOST:/www/wwwroot/0223wechat-server/dist/
           
           # 在远端重启 PM2 进程
