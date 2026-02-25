@@ -734,7 +734,7 @@ app.post('/api/admin/upload', authMiddleware, async (c) => {
 // ============================================================
 // 启动
 // ============================================================
-const PORT = parseInt(process.env.PORT || '3000');
+const PORT = parseInt(process.env.PORT || '8199');
 
 initDB()
     .then(() => {
