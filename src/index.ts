@@ -724,19 +724,28 @@ app.get('/api/themes', async (c) => {
 // ============================================================
 app.post('/api/upload', authMiddleware, async (c) => {
     try {
+        const traceId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const userAgent = c.req.header('user-agent') || '';
+        const ip = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || '';
         const body = await c.req.parseBody();
         const file = body['file'];
+        console.log(`[UPLOAD][${traceId}] receive request ip="${ip}" ua="${userAgent}" fields=${Object.keys(body).join(',')}`);
         if (!file || typeof file === 'string' || typeof (file as any).arrayBuffer !== 'function') {
+            console.warn(`[UPLOAD][${traceId}] missing file field or invalid file payload`);
             return c.json({ error: '请选择文件' }, 400);
         }
+        console.log(`[UPLOAD][${traceId}] file name="${file.name}" type="${file.type || 'unknown'}" size=${file.size}`);
         if (file.size <= 0) {
+            console.warn(`[UPLOAD][${traceId}] file.size=0, possible macOS iCloud placeholder or incomplete sync`);
             return c.json({ error: '上传文件为空（0B），请重新选择图片' }, 400);
         }
 
         const ext = path.extname(file.name) || '.jpg';
         const fileName = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
         const buffer = Buffer.from(await file.arrayBuffer());
+        console.log(`[UPLOAD][${traceId}] buffer.length=${buffer.length}`);
         if (buffer.length <= 0) {
+            console.warn(`[UPLOAD][${traceId}] buffer.length=0 after arrayBuffer(), possible local file read issue`);
             return c.json({ error: '读取上传文件失败（0B），请重试' }, 400);
         }
 
@@ -747,12 +756,15 @@ app.post('/api/upload', authMiddleware, async (c) => {
             },
         });
         if (!result?.url) {
+            console.error(`[UPLOAD][${traceId}] oss put success but url missing for object="${fileName}"`);
             return c.json({ error: '上传成功但未获取到文件地址' }, 500);
         }
         const secureUrl = result.url.replace('http://', 'https://');
+        console.log(`[UPLOAD][${traceId}] success object="${fileName}" url="${secureUrl}"`);
 
         return c.json({ code: 0, data: { url: secureUrl } });
     } catch (err: any) {
+        console.error('[UPLOAD] unexpected error:', err);
         return c.json({ error: err.message }, 500);
     }
 });
