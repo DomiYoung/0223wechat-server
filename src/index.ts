@@ -8,6 +8,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import OSS from 'ali-oss';
 import { queryThemes, toPublicTheme, toPublicThemeDetail, toAdminTheme } from './services/theme.service.js';
+import mpRoutes from './routes/mp.js';
+import admin305Routes from './routes/admin305.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = new Hono();
@@ -174,6 +176,40 @@ function resolveHallNameInput(payload: Record<string, any>): string {
     return style;
 }
 
+function buildLeadMeta(payload: Record<string, any>): Record<string, any> {
+    const keys = [
+        'location',
+        'activity',
+        'productTool',
+        'platform',
+        'submitType',
+        'channelId',
+        'markId',
+        'wid',
+        'openId',
+        'regionCode',
+        'originPhone',
+        'pagePath',
+        'drawId',
+        'dialogId',
+        'formId',
+        'countryCode',
+        'mark',
+    ];
+    const meta: Record<string, any> = {};
+    for (const key of keys) {
+        const value = payload[key];
+        if (value !== undefined && value !== null && value !== '') {
+            meta[key] = value;
+        }
+    }
+    return meta;
+}
+
+function toNullableJson(payload: Record<string, any>): string | null {
+    return Object.keys(payload).length > 0 ? JSON.stringify(payload) : null;
+}
+
 // ============================================================
 // 认证中间件
 // ============================================================
@@ -210,6 +246,147 @@ app.post('/api/admin/login', async (c) => {
                 admin: { id: admin.id, username: admin.username, display_name: admin.display_name, role: admin.role },
             },
         });
+    } catch (err: any) {
+        return c.json({ error: err.message }, 500);
+    }
+});
+
+// ============================================================
+// 微信小程序接口
+// ============================================================
+
+// 微信登录 - code 换取 session_key
+app.post('/api/wx/login', async (c) => {
+    try {
+        const { code } = await c.req.json();
+        if (!code) {
+            return c.json({ error: 'code 不能为空' }, 400);
+        }
+
+        const appId = process.env.WX_APPID;
+        const appSecret = process.env.WX_APPSECRET;
+
+        if (!appId || !appSecret || appSecret === 'your_appsecret_here') {
+            return c.json({ error: '微信配置未完成，请联系管理员' }, 500);
+        }
+
+        const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${appId}&secret=${appSecret}&js_code=${code}&grant_type=authorization_code`;
+
+        const res = await fetch(url);
+        const data = await res.json() as any;
+
+        if (data.errcode) {
+            console.error('微信登录失败:', data);
+            return c.json({ error: data.errmsg || '微信登录失败' }, 400);
+        }
+
+        return c.json({
+            code: 0,
+            data: {
+                session_key: data.session_key,
+                openid: data.openid
+            }
+        });
+    } catch (err: any) {
+        console.error('微信登录异常:', err);
+        return c.json({ error: err.message }, 500);
+    }
+});
+
+// 微信手机号解密
+app.post('/api/wx/decrypt-phone', async (c) => {
+    try {
+        const { session_key, encryptedData, iv } = await c.req.json();
+
+        if (!session_key || !encryptedData || !iv) {
+            return c.json({ error: '参数不完整，需要 session_key, encryptedData, iv' }, 400);
+        }
+
+        // 使用 Node.js 内置 crypto 模块解密
+        const crypto = await import('crypto');
+
+        // Base64 解码
+        const sessionKeyBuffer = Buffer.from(session_key, 'base64');
+        const encryptedBuffer = Buffer.from(encryptedData, 'base64');
+        const ivBuffer = Buffer.from(iv, 'base64');
+
+        // AES-128-CBC 解密
+        const decipher = crypto.createDecipheriv('aes-128-cbc', sessionKeyBuffer, ivBuffer);
+        decipher.setAutoPadding(true);
+
+        let decrypted = decipher.update(encryptedBuffer, undefined, 'utf8');
+        decrypted += decipher.final('utf8');
+
+        const phoneInfo = JSON.parse(decrypted);
+
+        // 验证 appId
+        const appId = process.env.WX_APPID;
+        if (phoneInfo.watermark?.appid !== appId) {
+            console.warn('AppId 不匹配:', phoneInfo.watermark?.appid, '!=', appId);
+        }
+
+        return c.json({
+            code: 0,
+            data: {
+                phoneNumber: phoneInfo.phoneNumber,
+                purePhoneNumber: phoneInfo.purePhoneNumber,
+                countryCode: phoneInfo.countryCode
+            }
+        });
+    } catch (err: any) {
+        console.error('手机号解密失败:', err);
+        return c.json({ error: '解密失败: ' + err.message }, 500);
+    }
+});
+
+// 手机号授权留痕（公开，小程序调用 /api/lead/auth-phone）
+app.post('/api/lead/auth-phone', async (c) => {
+    try {
+        const body = await c.req.json();
+        const mobile = String(body.mobile || '').trim();
+        if (!mobile) {
+            return c.json({ error: '手机号不能为空' }, 400);
+        }
+
+        const knownKeys = [
+            'mobile',
+            'countryCode',
+            'city',
+            'source',
+            'submitType',
+            'channelId',
+            'mark',
+            'wid',
+            'openId',
+            'pagePath',
+        ];
+        const extraMeta: Record<string, any> = {};
+        for (const [key, value] of Object.entries(body)) {
+            if (!knownKeys.includes(key) && value !== undefined && value !== null && value !== '') {
+                extraMeta[key] = value;
+            }
+        }
+
+        await pool.execute(
+            `INSERT INTO lead_auth_log (
+                mobile, country_code, city, source, submit_type, channel_id, mark, page_path, wid, open_id, extra_meta
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                mobile,
+                String(body.countryCode || '86').replace('+', ''),
+                String(body.city || ''),
+                String(body.source || ''),
+                Number(body.submitType || 0),
+                Number(body.channelId || 0),
+                String(body.mark || 'mobile'),
+                String(body.pagePath || ''),
+                String(body.wid || ''),
+                String(body.openId || ''),
+                toNullableJson(extraMeta),
+            ]
+        );
+
+        return c.json({ code: 0, data: { success: true } });
     } catch (err: any) {
         return c.json({ error: err.message }, 500);
     }
@@ -632,14 +809,16 @@ app.post('/api/reservation', async (c) => {
         if (!cityInfo.id && normalizedVenueId) {
             cityInfo = await resolveVenueCityInfo(normalizedVenueId);
         }
+        const leadMeta = buildLeadMeta(body);
+        const wechatOpenId = wechat_openid || body.openId || body.openid || null;
 
         const [result] = await pool.execute(
-            `INSERT INTO reservation (name, mobile, wechat_openid, wedding_date, tables_count, venue_id, case_id, source, sub_platform, city, city_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO reservation (name, mobile, wechat_openid, wedding_date, tables_count, venue_id, case_id, source, sub_platform, city, city_id, lead_meta)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 name,
                 mobile,
-                wechat_openid || null,
+                wechatOpenId,
                 wedding_date || '',
                 tables_count || 0,
                 normalizedVenueId,
@@ -648,6 +827,7 @@ app.post('/api/reservation', async (c) => {
                 sub_platform || '',
                 cityInfo.name || '',
                 cityInfo.id,
+                toNullableJson(leadMeta),
             ]
         ) as any;
 
@@ -884,35 +1064,251 @@ app.get('/api/themes/:id', async (c) => {
 app.post('/api/booking', async (c) => {
     try {
         const body = await c.req.json();
-        const { name, mobile, city, city_id, source, subPlatform, venue_id, case_id, wedding_date, tables_count } = body;
+        const {
+            name,
+            mobile,
+            city,
+            city_id,
+            source,
+            subPlatform,
+            sub_platform,
+            venue_id,
+            case_id,
+            wedding_date,
+            tables_count,
+            wechat_openid,
+            openId,
+            openid,
+        } = body;
         if (!name || !mobile) return c.json({ error: '姓名和手机号不能为空' }, 400);
 
         const normalizedVenueId = parsePositiveInt(venue_id);
+        const normalizedWeddingDate = wedding_date || body.date || '';
+        const normalizedTablesCount = tables_count ?? body.tables ?? 0;
+        const normalizedSubPlatform = subPlatform || sub_platform || '';
+        const wechatOpenId = wechat_openid || openId || openid || null;
+        const leadMeta = buildLeadMeta(body);
         let cityInfo = await resolveCityInfo(city_id, city, true);
         if (!cityInfo.id && normalizedVenueId) {
             cityInfo = await resolveVenueCityInfo(normalizedVenueId);
         }
 
         const [result] = await pool.execute(
-            `INSERT INTO reservation (name, mobile, city, city_id, source, sub_platform, venue_id, case_id, wedding_date, tables_count)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO reservation (name, mobile, wechat_openid, city, city_id, source, sub_platform, venue_id, case_id, wedding_date, tables_count, lead_meta)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 name,
                 mobile,
+                wechatOpenId,
                 cityInfo.name || '',
                 cityInfo.id,
                 source || '小程序',
-                subPlatform || '',
+                normalizedSubPlatform,
                 normalizedVenueId,
                 case_id || null,
-                wedding_date || '',
-                tables_count || 0,
+                normalizedWeddingDate,
+                normalizedTablesCount,
+                toNullableJson(leadMeta),
             ]
         ) as any;
 
         return c.json({ code: 0, data: { id: result.insertId } });
     } catch (err: any) {
         return c.json({ error: err.message }, 500);
+    }
+});
+
+// ============================================================
+// Weimob 1:1 Replica API 兼容层
+// ============================================================
+
+const weimobOk = (data: any = {}) => ({ errcode: 0, errmsg: 'success', data });
+
+// 1. 授权留资 (savePhoneData) -> 写入 lead_auth_log
+app.post('/api3/zhan/xapp/savePhoneData', async (c) => {
+    try {
+        const body = await c.req.json();
+        const {
+            formId, pageId, phone, submitType, markId, channelId, channel, mark, url,
+            wid, uwid, openId, pid, zhanId, wxDecryptData
+        } = body;
+        
+        await pool.execute(
+            `INSERT INTO lead_auth_log (
+                mobile, country_code, submit_type, channel_id, mark, page_path, 
+                wid, open_id, pid, zhan_id, form_id, page_id, mark_id, url, channel, wx_decrypt_data
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                phone || '', '86',
+                Number(submitType || 0), Number(channelId || 0), mark || 'mobile', pageId || '',
+                wid || '', openId || '', pid || '', zhanId || '', formId || '', pageId || '',
+                markId || '', url || '', channel || '',
+                wxDecryptData ? JSON.stringify(wxDecryptData) : null
+            ]
+        );
+        return c.json(weimobOk());
+    } catch (err: any) {
+        console.error('savePhoneData Error:', err);
+        return c.json({ errcode: 500, errmsg: err.message, data: {} });
+    }
+});
+
+// 2. 提交线索 (submit) -> 写入 lead_submit & lead_submit_field
+app.post('/api3/zhan/xapp/submit', async (c) => {
+    try {
+        const body = await c.req.json();
+        const {
+            formId, pageId, phone, regionCode, originPhone, submitType, markId, channelId,
+            drawId, dialogId, wid, uwid, openId, submitButtonId, url, data, pid, zhanId
+        } = body;
+
+        // 1. 存主表
+        const [submitResult] = await pool.execute(
+            `INSERT INTO lead_submit (
+                pid, zhan_id, wid, uwid, open_id, form_id, page_id, submit_type, channel_id, 
+                mark_id, draw_id, dialog_id, submit_button_id, url, phone, region_code, 
+                origin_phone, raw_payload
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                pid || '', zhanId || '', wid || '', uwid || '', openId || '', formId || '', pageId || '',
+                Number(submitType || 0), Number(channelId || 0), markId || '', drawId || '', dialogId || '', 
+                submitButtonId || '', url || '', phone || '', regionCode || '', originPhone || '',
+                JSON.stringify(body)
+            ]
+        ) as any;
+
+        const submitId = submitResult.insertId;
+
+        // 2. 存子表 (遍历 data 数组)
+        if (Array.isArray(data) && data.length > 0) {
+            for (let i = 0; i < data.length; i++) {
+                const item = data[i];
+                // 防御性保护，提取 item 属性
+                const fieldKey = item.fieldKey || item.name || '';
+                const label = item.label || '';
+                const itemMark = item.mark || '';
+                const mode = String(item.mode || '');
+                const valueJson = item.value !== undefined ? JSON.stringify(item.value) : null;
+                const showValue = item.showValue || (typeof item.value === 'string' ? item.value : '');
+
+                await pool.execute(
+                    `INSERT INTO lead_submit_field (
+                        submit_id, field_key, label, mark, mode, value_json, show_value, sort_order
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [submitId, fieldKey, label, itemMark, mode, valueJson, showValue, i]
+                );
+            }
+        }
+
+        return c.json(weimobOk());
+    } catch (err: any) {
+        console.error('submit Error:', err);
+        return c.json({ errcode: 500, errmsg: err.message, data: {} });
+    }
+});
+
+// 3. 线索列表 (form/list) -> 从 lead_submit 查询并还原 data[]
+app.post('/api3/zhan/xapp/form/list', async (c) => {
+    try {
+        const body = await c.req.json();
+        const wid = body.wid || '';
+        const pageNum = Math.max(1, body.pageNum || 1);
+        const pageSize = Math.min(50, Math.max(1, body.pageSize || 10));
+        const offset = (pageNum - 1) * pageSize;
+
+        // 先查总数
+        const [countRes] = await pool.execute(
+            'SELECT COUNT(*) as total FROM lead_submit WHERE wid = ?',
+            [wid]
+        ) as any;
+        const total = countRes[0].total;
+
+        // 再查主记录
+        const [rows] = await pool.execute(
+            'SELECT id, form_id, page_id, created_at FROM lead_submit WHERE wid = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+            [wid, pageSize, offset]
+        ) as any;
+
+        const list = [];
+        for (const row of rows) {
+            // 查询子表对应字段恢复
+            const [fields] = await pool.execute(
+                'SELECT field_key, label, mark, mode, value_json, show_value FROM lead_submit_field WHERE submit_id = ? ORDER BY sort_order ASC',
+                [row.id]
+            ) as any;
+
+            const dataArray = fields.map((f: any) => ({
+                fieldKey: f.field_key,
+                label: f.label,
+                mark: f.mark,
+                mode: f.mode,
+                value: f.value_json ? JSON.parse(f.value_json) : null,
+                showValue: f.show_value
+            }));
+
+            // 按照原系统所需的返回结构（只含关键的展示用壳子）
+            list.push({
+                submitId: row.id,
+                formId: row.form_id,
+                pageId: row.page_id,
+                submitTime: new Date(row.created_at).getTime(),
+                data: dataArray
+            });
+        }
+
+        return c.json(weimobOk({
+            list,
+            total,
+            pageNum,
+            pageSize
+        }));
+    } catch (err: any) {
+        console.error('form list error:', err);
+        return c.json({ errcode: 500, errmsg: err.message, data: {} });
+    }
+});
+
+// 4. 线索详情 (form/detail)
+app.post('/api3/zhan/xapp/form/detail', async (c) => {
+    try {
+        const body = await c.req.json();
+        const submitId = body.submitId;
+
+        const [rows] = await pool.execute(
+            'SELECT id, form_id, page_id, created_at FROM lead_submit WHERE id = ?',
+            [submitId]
+        ) as any;
+
+        if (rows.length === 0) {
+            return c.json({ errcode: 1044, errmsg: 'not found', data: {} });
+        }
+
+        const row = rows[0];
+
+        const [fields] = await pool.execute(
+            'SELECT field_key, label, mark, mode, value_json, show_value FROM lead_submit_field WHERE submit_id = ? ORDER BY sort_order ASC',
+            [row.id]
+        ) as any;
+
+        const dataArray = fields.map((f: any) => ({
+            fieldKey: f.field_key,
+            label: f.label,
+            mark: f.mark,
+            mode: f.mode,
+            value: f.value_json ? JSON.parse(f.value_json) : null,
+            showValue: f.show_value
+        }));
+
+        return c.json(weimobOk({
+            submitId: row.id,
+            formId: row.form_id,
+            pageId: row.page_id,
+            submitTime: new Date(row.created_at).getTime(),
+            data: dataArray
+        }));
+    } catch (err: any) {
+        console.error('form detail error:', err);
+        return c.json({ errcode: 500, errmsg: err.message, data: {} });
     }
 });
 
@@ -965,6 +1361,12 @@ app.post('/api/upload', authMiddleware, async (c) => {
         return c.json({ error: err.message }, 500);
     }
 });
+
+// ============================================================
+// 0305 扩展路由挂载
+// ============================================================
+app.route('/api/mp', mpRoutes);          // 小程序端接口
+app.route('/api/admin', admin305Routes); // CMS管理端扩展接口（需认证，复用 authMiddleware）
 
 // ============================================================
 // 启动

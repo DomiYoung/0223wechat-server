@@ -159,6 +159,7 @@ export async function initDB() {
             city_id INT DEFAULT NULL COMMENT '关联城市',
             status ENUM('待跟进','已联系','已签约','无效') DEFAULT '待跟进' COMMENT '跟进状态',
             remark TEXT COMMENT '跟进备注',
+            lead_meta JSON COMMENT '留资扩展信息',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_mobile (mobile),
@@ -177,8 +178,106 @@ export async function initDB() {
         await db.execute(`ALTER TABLE reservation ADD COLUMN city_id INT DEFAULT NULL COMMENT '关联城市' AFTER city`);
         await db.execute(`ALTER TABLE reservation ADD INDEX idx_city_id (city_id)`);
     } catch (_) { /* 列已存在则忽略 */ }
+    try {
+        await db.execute(`ALTER TABLE reservation ADD COLUMN lead_meta JSON COMMENT '留资扩展信息' AFTER remark`);
+    } catch (_) { /* 列已存在则忽略 */ }
 
-    // 8. audit_log — 操作审计日志
+    // 8. lead_auth_log — 手机号授权获客日志
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS lead_auth_log (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            mobile VARCHAR(20) NOT NULL COMMENT '手机号',
+            country_code VARCHAR(10) DEFAULT '86' COMMENT '国家区号',
+            city VARCHAR(20) DEFAULT '' COMMENT '城市',
+            source VARCHAR(100) DEFAULT '' COMMENT '来源标识',
+            submit_type INT DEFAULT 0 COMMENT '提交类型',
+            channel_id INT DEFAULT 0 COMMENT '渠道ID',
+            mark VARCHAR(50) DEFAULT '' COMMENT '标记',
+            page_path VARCHAR(255) DEFAULT '' COMMENT '页面路径',
+            wid VARCHAR(64) DEFAULT '' COMMENT '用户wid',
+            open_id VARCHAR(64) DEFAULT '' COMMENT '微信openid',
+            
+            -- 新增的 1:1 关键关联字段
+            pid VARCHAR(50) DEFAULT '' COMMENT '商户PID',
+            zhan_id VARCHAR(50) DEFAULT '' COMMENT '微站ID',
+            form_id VARCHAR(64) DEFAULT '' COMMENT '表单ID',
+            page_id VARCHAR(64) DEFAULT '' COMMENT '页面ID',
+            mark_id VARCHAR(64) DEFAULT '' COMMENT '追踪ID',
+            url TEXT COMMENT '来源URL',
+            channel VARCHAR(50) DEFAULT '' COMMENT '渠道',
+            wx_decrypt_data JSON COMMENT '微信手机号原始解密结果',
+            
+            extra_meta JSON COMMENT '扩展数据',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_mobile_created (mobile, created_at DESC),
+            INDEX idx_source_created (source(50), created_at DESC),
+            INDEX idx_wid_created (wid, created_at DESC),
+            INDEX idx_openid_created (open_id, created_at DESC),
+            INDEX idx_page_form_created (page_id, form_id, created_at DESC)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='手机号授权获客日志'
+    `);
+
+    // 兼容原表增加列与索引
+    try { await db.execute('ALTER TABLE lead_auth_log ADD COLUMN pid VARCHAR(50) DEFAULT "" AFTER open_id'); } catch (e) {}
+    try { await db.execute('ALTER TABLE lead_auth_log ADD COLUMN zhan_id VARCHAR(50) DEFAULT ""'); } catch (e) {}
+    try { await db.execute('ALTER TABLE lead_auth_log ADD COLUMN form_id VARCHAR(64) DEFAULT ""'); } catch (e) {}
+    try { await db.execute('ALTER TABLE lead_auth_log ADD COLUMN page_id VARCHAR(64) DEFAULT ""'); } catch (e) {}
+    try { await db.execute('ALTER TABLE lead_auth_log ADD COLUMN mark_id VARCHAR(64) DEFAULT ""'); } catch (e) {}
+    try { await db.execute('ALTER TABLE lead_auth_log ADD COLUMN url TEXT'); } catch (e) {}
+    try { await db.execute('ALTER TABLE lead_auth_log ADD COLUMN channel VARCHAR(50) DEFAULT ""'); } catch (e) {}
+    try { await db.execute('ALTER TABLE lead_auth_log ADD COLUMN wx_decrypt_data JSON'); } catch (e) {}
+    try { await db.execute('CREATE INDEX idx_wid_created ON lead_auth_log(wid, created_at DESC)'); } catch (e) {}
+    try { await db.execute('CREATE INDEX idx_openid_created ON lead_auth_log(open_id, created_at DESC)'); } catch (e) {}
+    try { await db.execute('CREATE INDEX idx_page_form_created ON lead_auth_log(page_id, form_id, created_at DESC)'); } catch (e) {}
+
+    // 8.1 lead_submit — 原始提交主表 (1:1 复刻留资)
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS lead_submit (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            pid VARCHAR(50) DEFAULT '' COMMENT '商户PID',
+            zhan_id VARCHAR(50) DEFAULT '' COMMENT '微站ID',
+            wid VARCHAR(64) DEFAULT '' COMMENT '用户wid',
+            uwid VARCHAR(64) DEFAULT '' COMMENT 'UnionWID',
+            open_id VARCHAR(64) DEFAULT '' COMMENT '微信openid',
+            form_id VARCHAR(64) DEFAULT '' COMMENT '表单ID',
+            page_id VARCHAR(64) DEFAULT '' COMMENT '页面ID',
+            submit_type INT DEFAULT 0 COMMENT '提交类型',
+            channel_id INT DEFAULT 0 COMMENT '渠道ID',
+            mark_id VARCHAR(64) DEFAULT '' COMMENT '追踪markId',
+            draw_id VARCHAR(64) DEFAULT '' COMMENT '抽奖ID',
+            dialog_id VARCHAR(64) DEFAULT '' COMMENT '弹窗ID',
+            submit_button_id VARCHAR(64) DEFAULT '' COMMENT '按钮ID',
+            url TEXT COMMENT '页面URL',
+            phone VARCHAR(20) DEFAULT '' COMMENT '留资手机号',
+            region_code VARCHAR(10) DEFAULT '' COMMENT '区号',
+            origin_phone VARCHAR(20) DEFAULT '' COMMENT '原始手机号',
+            raw_payload JSON COMMENT '提交的完整参数',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_wid (wid),
+            INDEX idx_phone (phone),
+            INDEX idx_form_page (form_id, page_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='原始提交主表'
+    `);
+
+    // 8.2 lead_submit_field — 提交明细子表
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS lead_submit_field (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            submit_id INT NOT NULL COMMENT '关联的提交主表ID',
+            field_key VARCHAR(100) DEFAULT '' COMMENT '字段key (如name/phone)',
+            label VARCHAR(100) DEFAULT '' COMMENT '标签 (如姓名)',
+            mark VARCHAR(100) DEFAULT '' COMMENT '标记',
+            mode VARCHAR(50) DEFAULT '' COMMENT '类型/模式',
+            value_json JSON COMMENT '真实存的值(用于复原)',
+            show_value TEXT COMMENT '展示的拼装值',
+            sort_order INT DEFAULT 0 COMMENT '排序',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_submit_id (submit_id),
+            FOREIGN KEY (submit_id) REFERENCES lead_submit(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='提交明细子表'
+    `);
+
+    // 9. audit_log — 操作审计日志
     await db.execute(`
         CREATE TABLE IF NOT EXISTS audit_log (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -192,6 +291,135 @@ export async function initDB() {
             INDEX idx_admin_time (admin_id, created_at),
             INDEX idx_target (target_table, target_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='操作审计日志'
+    `);
+
+    // ============================================================
+    // 0305 扩展表：品牌
+    // ============================================================
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS brand (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL COMMENT '品牌名称',
+            logo_url TEXT COMMENT 'Logo图',
+            slogan VARCHAR(200) DEFAULT '' COMMENT '标语',
+            description TEXT COMMENT '品牌介绍(富文本)',
+            contact_phone VARCHAR(50) DEFAULT '' COMMENT '品牌总机',
+            contact_wechat VARCHAR(50) DEFAULT '' COMMENT '微信号',
+            is_active TINYINT(1) DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='品牌'
+    `);
+
+    // venue 扩展: 增加 brand_id
+    try { await db.execute('ALTER TABLE venue ADD COLUMN brand_id INT DEFAULT NULL COMMENT \'所属品牌\' AFTER name'); } catch (_) {}
+    try { await db.execute('ALTER TABLE venue ADD INDEX idx_brand_id (brand_id)'); } catch (_) {}
+
+    // ============================================================
+    // 0305 扩展表：案例分类
+    // ============================================================
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS case_category (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(50) NOT NULL COMMENT '分类名: 婚礼案例/婚礼攻略',
+            sort_order INT DEFAULT 0,
+            is_active TINYINT(1) DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='案例分类'
+    `);
+
+    // wedding_case 扩展: 增加 category_id, content, views, likes
+    try { await db.execute('ALTER TABLE wedding_case ADD COLUMN category_id INT DEFAULT NULL COMMENT \'案例分类\' AFTER venue_id'); } catch (_) {}
+    try { await db.execute('ALTER TABLE wedding_case ADD COLUMN content TEXT COMMENT \'富文本详情\' AFTER description'); } catch (_) {}
+    try { await db.execute('ALTER TABLE wedding_case ADD COLUMN views INT DEFAULT 0 COMMENT \'浏览量\' AFTER content'); } catch (_) {}
+    try { await db.execute('ALTER TABLE wedding_case ADD COLUMN likes INT DEFAULT 0 COMMENT \'点赞数\' AFTER views'); } catch (_) {}
+    try { await db.execute('ALTER TABLE wedding_case ADD INDEX idx_category (category_id)'); } catch (_) {}
+
+    // ============================================================
+    // 0305 扩展表：套餐分类（独立业务线，不关联品牌）
+    // ============================================================
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS package_category (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL COMMENT '婚宴菜单/婚庆套餐/生日宴/儿童宴/商务宴会',
+            slug VARCHAR(50) UNIQUE COMMENT 'URL标识',
+            cover_url TEXT COMMENT '分类封面图',
+            sort_order INT DEFAULT 0,
+            is_active TINYINT(1) DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='套餐分类'
+    `);
+
+    // ============================================================
+    // 0305 扩展表：套餐
+    // ============================================================
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS package (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            category_id INT NOT NULL COMMENT '所属分类',
+            title VARCHAR(200) NOT NULL COMMENT '套餐名称',
+            cover_url TEXT COMMENT '封面图',
+            price DECIMAL(10,2) DEFAULT NULL COMMENT '价格',
+            price_label VARCHAR(50) DEFAULT '' COMMENT '价格标签文字',
+            tag VARCHAR(50) DEFAULT '' COMMENT '标签: 热门/推荐',
+            description TEXT COMMENT '套餐描述(富文本)',
+            sort_order INT DEFAULT 0,
+            is_active TINYINT(1) DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (category_id) REFERENCES package_category(id) ON DELETE CASCADE,
+            INDEX idx_category_active (category_id, is_active),
+            INDEX idx_sort (sort_order, id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='套餐'
+    `);
+
+    // ============================================================
+    // 0305 扩展表：套餐图集
+    // ============================================================
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS package_image (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            package_id INT NOT NULL,
+            image_url TEXT NOT NULL COMMENT '图片地址',
+            sort_order INT DEFAULT 0,
+            FOREIGN KEY (package_id) REFERENCES package(id) ON DELETE CASCADE,
+            INDEX idx_pkg_sort (package_id, sort_order)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='套餐图集'
+    `);
+
+    // ============================================================
+    // 0305 扩展表：页面动态配置 (CMS可编辑)
+    // ============================================================
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS page_config (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            page_key VARCHAR(50) UNIQUE NOT NULL COMMENT '页面标识: home/cases/birthday/store/about',
+            title VARCHAR(100) COMMENT '页面标题',
+            bg_color VARCHAR(20) DEFAULT '#ffffff',
+            elements_json JSON NOT NULL COMMENT '组件列表(Banner/Text/Grid/Form等)',
+            bottom_nav_json JSON COMMENT '底部导航配置',
+            music_url TEXT COMMENT '背景音乐URL',
+            is_active TINYINT(1) DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='页面动态配置(CMS可编辑)'
+    `);
+
+    // ============================================================
+    // 0305 扩展表：小程序用户
+    // ============================================================
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS wx_user (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            openid VARCHAR(100) UNIQUE COMMENT '微信openid',
+            unionid VARCHAR(100) COMMENT '微信unionid',
+            nickname VARCHAR(100) COMMENT '昵称',
+            avatar_url TEXT COMMENT '头像',
+            phone VARCHAR(20) COMMENT '手机号',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_phone (phone)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='小程序用户'
     `);
 
     // ============================================================
@@ -243,7 +471,27 @@ export async function initDB() {
         console.log('🏠 默认门店已创建（上海/北京/南京）');
     }
 
-    console.log('✅ 数据库初始化完毕 — 8张表全部就绪');
+    // 案例分类种子数据
+    const [caseCatRows] = await db.execute('SELECT COUNT(*) as count FROM case_category') as any;
+    if (caseCatRows[0].count === 0) {
+        await db.execute("INSERT INTO case_category (name, sort_order) VALUES ('婚礼案例', 1), ('婚礼攻略', 2)");
+        console.log('📂 案例分类已创建: 婚礼案例 / 婚礼攻略');
+    }
+
+    // 套餐分类种子数据
+    const [pkgCatRows] = await db.execute('SELECT COUNT(*) as count FROM package_category') as any;
+    if (pkgCatRows[0].count === 0) {
+        await db.execute(`INSERT INTO package_category (name, slug, sort_order) VALUES
+            ('婚宴菜单', 'wedding_menu', 1),
+            ('婚庆套餐', 'wedding_pkg', 2),
+            ('生日宴', 'birthday', 3),
+            ('儿童宴', 'kids', 4),
+            ('商务宴会', 'business', 5)
+        `);
+        console.log('📦 套餐分类已创建: 婚宴菜单 / 婚庆套餐 / 生日宴 / 儿童宴 / 商务宴会');
+    }
+
+    console.log('✅ 数据库初始化完毕 — 16张表全部就绪');
 }
 
 /**
