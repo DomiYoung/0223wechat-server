@@ -6,6 +6,7 @@
  */
 import { Hono } from 'hono';
 import pool from '../db.js';
+import { processBulkUpload } from '../services/bulk-upload.service.js';
 
 const admin305 = new Hono();
 
@@ -423,6 +424,33 @@ admin305.delete('/venue-hall/:id', async (c) => {
     await pool.execute('DELETE FROM case_image WHERE case_id = ?', [id]);
     await pool.execute('DELETE FROM wedding_case WHERE id = ? AND is_featured = 1', [id]);
     return c.json({ code: 0 });
+});
+
+// ============================================================
+// 素材批量处理上传 (Bulk Upload ZIP)
+// ============================================================
+admin305.post('/bulk-upload', async (c) => {
+    try {
+        const body = await c.req.parseBody();
+        const file = body['file'] as File;
+        
+        if (!file || typeof file === 'string' || typeof file.arrayBuffer !== 'function') {
+            return c.json({ error: '请选择.zip压缩包文件' }, 400);
+        }
+
+        if (!file.name.endsWith('.zip')) {
+            return c.json({ error: '仅支持.zip格式的文件上传' }, 400);
+        }
+
+        const buffer = Buffer.from(await file.arrayBuffer());
+        // Do processing
+        const report = await processBulkUpload(buffer);
+        
+        return c.json({ code: 0, data: { report } });
+    } catch (err: any) {
+        console.error('[Admin305] bulk upload failed:', err);
+        return c.json({ error: err.message }, 500);
+    }
 });
 
 export default admin305;
