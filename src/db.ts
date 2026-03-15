@@ -388,6 +388,24 @@ export async function initDB() {
     `);
 
     // ============================================================
+    // 0305 扩展表：门店环境图集
+    // ============================================================
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS venue_image (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            venue_id INT NOT NULL,
+            image_url TEXT NOT NULL COMMENT '图片地址',
+            sort_order INT DEFAULT 0,
+            FOREIGN KEY (venue_id) REFERENCES venue(id) ON DELETE CASCADE,
+            INDEX idx_venue_sort (venue_id, sort_order)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='门店环境图集'
+    `);
+
+    // venue 扩展: 增加 metro_info / description
+    try { await db.execute('ALTER TABLE venue ADD COLUMN metro_info VARCHAR(200) DEFAULT \'\' COMMENT \'地铁信息\' AFTER business_hours'); } catch (_) {}
+    try { await db.execute('ALTER TABLE venue ADD COLUMN description TEXT COMMENT \'门店描述\' AFTER metro_info'); } catch (_) {}
+
+    // ============================================================
     // 0305 扩展表：页面动态配置 (CMS可编辑)
     // ============================================================
     await db.execute(`

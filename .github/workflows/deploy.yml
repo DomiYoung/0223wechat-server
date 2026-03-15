@@ -1,15 +1,20 @@
-name: Deploy Wechat Server API
+name: Deploy WeChat Server
 
 on:
   push:
     branches:
       - main
-      - master
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'bun.lockb'
+      - 'deploy.sh'
+      - '.github/workflows/deploy.yml'
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -22,24 +27,24 @@ jobs:
       - name: Install Dependencies
         run: bun install
 
-      - name: Build Project (TSC)
+      - name: Build Project
         run: bun run build
 
-      - name: Deploy to Server via Rsync
+      - name: Deploy to Server
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_IP: ${{ secrets.SERVER_IP }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_PASS: ${{ secrets.SERVER_PASS }}
+          DEST_PATH: /www/wwwroot/0223wechat-server
         run: |
-          # 设置 SSH 秘钥
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
-          
-          # 使用 rsync 增量同步编译后的 dist 及依赖配置
-          rsync -avz -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" package.json bun.lock $SERVER_USER@$SERVER_HOST:/www/wwwroot/0223wechat-server/
-          rsync -avz --delete -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" dist/ $SERVER_USER@$SERVER_HOST:/www/wwwroot/0223wechat-server/dist/
-          
-          # 在远端重启 PM2 进程
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST "cd /www/wwwroot/0223wechat-server && pm2 restart wechat-server"
+          # Setup SSHpass
+          sudo apt-get update && sudo apt-get install -y sshpass rsync
+
+          echo "🚀 Syncing files..."
+          sshpass -p "$SERVER_PASS" rsync -rz --progress -e "ssh -o StrictHostKeyChecking=no" package.json $SERVER_USER@$SERVER_IP:$DEST_PATH/
+          sshpass -p "$SERVER_PASS" rsync -rz --progress --delete -e "ssh -o StrictHostKeyChecking=no" dist/ $SERVER_USER@$SERVER_IP:$DEST_PATH/dist/
+          sshpass -p "$SERVER_PASS" rsync -rz --progress --delete -e "ssh -o StrictHostKeyChecking=no" api_dump/ $SERVER_USER@$SERVER_IP:$DEST_PATH/api_dump/
+
+          echo "🚀 Restarting PM2 service..."
+          sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "cd $DEST_PATH && pm2 restart wechat-server"
+          echo "✅ Deployment Successful!"

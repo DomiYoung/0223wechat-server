@@ -290,4 +290,139 @@ admin305.get('/wx-users', async (c) => {
     return c.json({ code: 0, data: { list: rows, total: countRes[0].total, page, pageSize } });
 });
 
+// ============================================================
+// 门店管理 (CRUD with new fields)
+// ============================================================
+admin305.get('/venues', async (c) => {
+    const [rows] = await pool.execute(
+        `SELECT v.*, b.name AS brandName FROM venue v LEFT JOIN brand b ON v.brand_id = b.id ORDER BY v.id`
+    ) as any;
+    // 附带每个门店的轮播图
+    for (const v of rows) {
+        const [imgs] = await pool.execute('SELECT id, image_url, sort_order FROM venue_image WHERE venue_id = ? ORDER BY sort_order', [v.id]) as any;
+        v.images = imgs;
+        // 附带宴会厅数量
+        const [hallCount] = await pool.execute('SELECT COUNT(*) as cnt FROM wedding_case WHERE venue_id = ? AND is_featured = 1', [v.id]) as any;
+        v.hallCount = hallCount[0].cnt;
+    }
+    return c.json({ code: 0, data: { list: rows } });
+});
+
+admin305.put('/venue/:id', async (c) => {
+    const id = c.req.param('id');
+    const body = await c.req.json();
+    const allowed = ['name', 'address', 'phone', 'city', 'lat', 'lng', 'business_hours', 'metro_info', 'description', 'cover_url', 'is_active', 'brand_id'];
+    const sets: string[] = [];
+    const params: any[] = [];
+    for (const key of allowed) {
+        if (body[key] !== undefined) {
+            sets.push(`${key} = ?`);
+            params.push(body[key]);
+        }
+    }
+    if (sets.length === 0) return c.json({ code: 400, msg: 'No fields to update' });
+    params.push(id);
+    await pool.execute(`UPDATE venue SET ${sets.join(', ')} WHERE id = ?`, params);
+    return c.json({ code: 0 });
+});
+
+admin305.post('/venue', async (c) => {
+    const body = await c.req.json();
+    const { name, address, phone, city, brand_id, metro_info, description, cover_url } = body;
+    const [res] = await pool.execute(
+        `INSERT INTO venue (name, address, phone, city, brand_id, metro_info, description, cover_url)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [name, address || '', phone || '', city || '上海', brand_id || null, metro_info || '', description || '', cover_url || '']
+    ) as any;
+    return c.json({ code: 0, data: { id: res.insertId } });
+});
+
+// ============================================================
+// 门店环境图集 (venue_image CRUD)
+// ============================================================
+admin305.get('/venue-images/:venueId', async (c) => {
+    const venueId = c.req.param('venueId');
+    const [rows] = await pool.execute(
+        'SELECT id, venue_id, image_url, sort_order FROM venue_image WHERE venue_id = ? ORDER BY sort_order',
+        [venueId]
+    ) as any;
+    return c.json({ code: 0, data: { list: rows } });
+});
+
+admin305.post('/venue-image', async (c) => {
+    const { venue_id, image_url, sort_order } = await c.req.json();
+    if (!venue_id || !image_url) return c.json({ code: 400, msg: 'venue_id and image_url required' });
+    const [res] = await pool.execute(
+        'INSERT INTO venue_image (venue_id, image_url, sort_order) VALUES (?, ?, ?)',
+        [venue_id, image_url, sort_order || 0]
+    ) as any;
+    return c.json({ code: 0, data: { id: res.insertId } });
+});
+
+admin305.delete('/venue-image/:id', async (c) => {
+    const id = c.req.param('id');
+    await pool.execute('DELETE FROM venue_image WHERE id = ?', [id]);
+    return c.json({ code: 0 });
+});
+
+// ============================================================
+// 宴会厅管理 (基于 wedding_case, is_featured=1)
+// ============================================================
+admin305.get('/venue-halls/:venueId', async (c) => {
+    const venueId = c.req.param('venueId');
+    const [rows] = await pool.execute(
+        `SELECT wc.id, wc.title, wc.hall_name, wc.cover_url, wc.description, wc.is_active, wc.sort_order,
+                v.name AS venueName
+         FROM wedding_case wc
+         LEFT JOIN venue v ON wc.venue_id = v.id
+         WHERE wc.venue_id = ? AND wc.is_featured = 1
+         ORDER BY wc.sort_order, wc.id`,
+        [venueId]
+    ) as any;
+    // 附带每个厅的图片数
+    for (const h of rows) {
+        const [imgCount] = await pool.execute('SELECT COUNT(*) as cnt FROM case_image WHERE case_id = ?', [h.id]) as any;
+        h.imageCount = imgCount[0].cnt;
+    }
+    return c.json({ code: 0, data: { list: rows } });
+});
+
+admin305.post('/venue-hall', async (c) => {
+    const body = await c.req.json();
+    const { title, hall_name, venue_id, description, cover_url } = body;
+    if (!venue_id || !hall_name) return c.json({ code: 400, msg: 'venue_id and hall_name required' });
+    const [res] = await pool.execute(
+        `INSERT INTO wedding_case (title, hall_name, venue_id, description, cover_url, is_featured, is_active, sort_order)
+         VALUES (?, ?, ?, ?, ?, 1, 1, 0)`,
+        [title || hall_name, hall_name, venue_id, description || '', cover_url || '']
+    ) as any;
+    return c.json({ code: 0, data: { id: res.insertId } });
+});
+
+admin305.put('/venue-hall/:id', async (c) => {
+    const id = c.req.param('id');
+    const body = await c.req.json();
+    const allowed = ['title', 'hall_name', 'description', 'cover_url', 'is_active', 'sort_order', 'venue_id'];
+    const sets: string[] = [];
+    const params: any[] = [];
+    for (const key of allowed) {
+        if (body[key] !== undefined) {
+            sets.push(`${key} = ?`);
+            params.push(body[key]);
+        }
+    }
+    if (sets.length === 0) return c.json({ code: 400, msg: 'No fields to update' });
+    params.push(id);
+    await pool.execute(`UPDATE wedding_case SET ${sets.join(', ')} WHERE id = ?`, params);
+    return c.json({ code: 0 });
+});
+
+admin305.delete('/venue-hall/:id', async (c) => {
+    const id = c.req.param('id');
+    // 同时删除关联图片
+    await pool.execute('DELETE FROM case_image WHERE case_id = ?', [id]);
+    await pool.execute('DELETE FROM wedding_case WHERE id = ? AND is_featured = 1', [id]);
+    return c.json({ code: 0 });
+});
+
 export default admin305;

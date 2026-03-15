@@ -253,12 +253,12 @@ mp.post('/package/detail', async (c) => {
 });
 
 // ============================================================
-// 门店列表（按城市）
+// 门店列表（增强版：含品牌名、地铁信息、轮播图）
 // ============================================================
 mp.post('/venues', async (c) => {
     try {
         const body = await c.req.json().catch(() => ({}));
-        const { cityId } = body as any;
+        const { cityId, brandId } = body as any;
 
         const conditions: string[] = ['v.is_active = 1'];
         const params: any[] = [];
@@ -267,21 +267,153 @@ mp.post('/venues', async (c) => {
             conditions.push('v.city_id = ?');
             params.push(cityId);
         }
+        if (brandId) {
+            conditions.push('v.brand_id = ?');
+            params.push(brandId);
+        }
 
         const where = conditions.join(' AND ');
 
         const [list] = await pool.execute(
             `SELECT v.id, v.name, COALESCE(ct.name, v.city) AS city,
                     v.address, v.phone, v.cover_url AS coverUrl,
-                    v.business_hours AS businessHours, v.lat, v.lng
+                    v.business_hours AS businessHours, v.lat, v.lng,
+                    v.metro_info AS metroInfo, v.description,
+                    b.name AS brandName
              FROM venue v
              LEFT JOIN city ct ON v.city_id = ct.id
+             LEFT JOIN brand b ON v.brand_id = b.id
              WHERE ${where}
-             ORDER BY v.city_id, v.id`,
+             ORDER BY v.brand_id, v.id`,
             params
         ) as any;
 
+        // 附带每个门店的轮播图
+        for (const venue of list) {
+            const [imgs] = await pool.execute(
+                'SELECT image_url FROM venue_image WHERE venue_id = ? ORDER BY sort_order',
+                [venue.id]
+            ) as any;
+            venue.images = imgs.map((i: any) => i.image_url);
+        }
+
         return c.json(ok({ list }));
+    } catch (err: any) {
+        return c.json(fail(err.message));
+    }
+});
+
+// ============================================================
+// 门店详情（含宴会厅列表+轮播图）
+// ============================================================
+mp.post('/venue/detail', async (c) => {
+    try {
+        const { id } = await c.req.json();
+        if (!id) return c.json(fail('缺少门店ID', 400));
+
+        const [rows] = await pool.execute(
+            `SELECT v.id, v.name, COALESCE(ct.name, v.city) AS city,
+                    v.address, v.phone, v.cover_url AS coverUrl,
+                    v.business_hours AS businessHours, v.lat, v.lng,
+                    v.metro_info AS metroInfo, v.description,
+                    b.name AS brandName
+             FROM venue v
+             LEFT JOIN city ct ON v.city_id = ct.id
+             LEFT JOIN brand b ON v.brand_id = b.id
+             WHERE v.id = ?`,
+            [id]
+        ) as any;
+
+        if (rows.length === 0) return c.json(fail('门店不存在', 404));
+        const venue = rows[0];
+
+        // 轮播图
+        const [imgs] = await pool.execute(
+            'SELECT image_url FROM venue_image WHERE venue_id = ? ORDER BY sort_order', [id]
+        ) as any;
+        venue.images = imgs.map((i: any) => i.image_url);
+
+        // 宴会厅列表
+        const [halls] = await pool.execute(
+            `SELECT wc.id, wc.title, wc.hall_name AS hallName, wc.cover_url AS coverUrl, wc.description
+             FROM wedding_case wc
+             WHERE wc.venue_id = ? AND wc.is_featured = 1 AND wc.is_active = 1
+             ORDER BY wc.sort_order, wc.id`,
+            [id]
+        ) as any;
+        venue.halls = halls;
+
+        return c.json(ok(venue));
+    } catch (err: any) {
+        return c.json(fail(err.message));
+    }
+});
+
+// ============================================================
+// 宴会厅列表（按门店）
+// ============================================================
+mp.post('/venue/halls', async (c) => {
+    try {
+        const { venueId } = await c.req.json();
+        if (!venueId) return c.json(fail('缺少门店ID', 400));
+
+        const [list] = await pool.execute(
+            `SELECT wc.id, wc.title, wc.hall_name AS hallName,
+                    wc.cover_url AS coverUrl, wc.description
+             FROM wedding_case wc
+             WHERE wc.venue_id = ? AND wc.is_featured = 1 AND wc.is_active = 1
+             ORDER BY wc.sort_order, wc.id`,
+            [venueId]
+        ) as any;
+
+        // 附带每个厅的封面图（取第一张 case_image）
+        for (const hall of list) {
+            const [imgs] = await pool.execute(
+                'SELECT image_url FROM case_image WHERE case_id = ? ORDER BY sort_order LIMIT 1',
+                [hall.id]
+            ) as any;
+            if (imgs.length > 0 && !hall.coverUrl) {
+                hall.coverUrl = imgs[0].image_url;
+            }
+        }
+
+        return c.json(ok({ list }));
+    } catch (err: any) {
+        return c.json(fail(err.message));
+    }
+});
+
+// ============================================================
+// 宴会厅详情（单个厅 + 图集）
+// ============================================================
+mp.post('/hall/detail', async (c) => {
+    try {
+        const { id } = await c.req.json();
+        if (!id) return c.json(fail('缺少宴会厅ID', 400));
+
+        const [rows] = await pool.execute(
+            `SELECT wc.id, wc.title, wc.hall_name AS hallName,
+                    wc.cover_url AS coverUrl, wc.description,
+                    wc.tag, wc.wedding_date AS weddingDate,
+                    v.name AS venueName, COALESCE(ct.name, v.city) AS city
+             FROM wedding_case wc
+             LEFT JOIN venue v ON wc.venue_id = v.id
+             LEFT JOIN city ct ON v.city_id = ct.id
+             WHERE wc.id = ? AND wc.is_active = 1`,
+            [id]
+        ) as any;
+
+        if (rows.length === 0) return c.json(fail('宴会厅不存在', 404));
+
+        const hall = rows[0];
+
+        // 获取图集
+        const [images] = await pool.execute(
+            'SELECT image_url FROM case_image WHERE case_id = ? ORDER BY sort_order', [id]
+        ) as any;
+        hall.images = images.map((i: any) => i.image_url);
+
+        return c.json(ok(hall));
     } catch (err: any) {
         return c.json(fail(err.message));
     }

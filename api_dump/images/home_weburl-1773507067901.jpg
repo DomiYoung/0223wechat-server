@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>微盟微站_完全可视化拖拽，三分钟生成官网小程序</title>
+    <meta content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+    <meta name="baidu-site-verification" content="E6EBSdDVlj" />
+    <meta name="description" content="微盟微站,完美兼容小程序和公众号,拥有丰富的模板、组件库，任意选择搭配使用，仅需3分钟就能生成精美的官网小程序。"/>
+    <meta name="keywords" content="微盟,微站,小程序,微站小程序,微信小程序,官网小程序,微网站,网站小程序,企业官网小程序,微官网,手机建站,手机网站"/>
+    <!-- Mobile Devices Support @begin -->
+    <meta content="telephone=no, address=no" name="format-detection">
+    <meta name="apple-mobile-web-app-capable" content="yes" /> <!-- apple devices fullscreen -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Mobile Devices Support @end -->
+    <!-- css  -->
+    <link type="text/css" rel="stylesheet" href="/build/css/common-549ad5326d.css"/>
+    <link type="text/css" rel="stylesheet" href="/build/css/style-d9fadd9d79.css"/>
+    <link rel="stylesheet" type="text/css" href="/build/css/iconfont-0bcb1f3eb4.css">
+    <!-- js -->
+    <script type="text/javascript" src="/build/js/flexible-6f055263eb.js"></script>
+    <script type="text/javascript" src="/build/js/iconfont-6e88905b9e.js"></script>
+    <script type="text/javascript" src="//cdn.weimob.com/saas/rprm.js"></script>
+    
+</head>
+
+<body>
+
+<!-- top -->
+<div class="m-top">
+    <!-- m-logo g-flex vc jc  -->
+    
+    <div class="m-title-wrap g-flex g-plr i-al j-center ">
+        
+        <div class="f-oh">
+            <span class="wz-logo"></span>
+            <span class="stock-code wz-stock-code">
+                股票代码<br/>
+                2013.HK</span>
+        </div>
+
+        
+    </div>
+    
+</div>
+
+<!-- head -->
+<div class="m-head2 g-tac">
+    <div class="g-main i-ban2  k-fcw">
+        <p class="g-mt170 k-fs44">微盟微站小程序</p>
+        <p class="g-mt40 k-fs26">完全可视化拖拽</p>
+        <p class="g-mt14 k-fs26 g-mb44">三分钟打造自己的小程序</p>
+    </div>
+</div>
+<div class="wz-2f-wrap">
+    <p class="wz-2f-t k-fs36 col2 g-tac g-mt80 g-mb70">微站优势</p>
+    <ul class="f-oh">
+        <li class="wz-2f-item g-flex">
+            <span class="wz-in1-scxcx"></span>
+            <div class="flex1">
+                <p claas="k-fs26 col2 g-mb10">3分钟生成小程序</p>
+                <p class="k-fs24 col3 l-height36">只需【扫码授权】-【装修小程序】-【保存发布】3步，即可生成官网小程序</p>
+            </div>
+        </li>
+        <li class="wz-2f-item g-flex">
+            <span class="wz-in1-ksh"></span>
+            <div class="flex1">
+                <p claas="k-fs26 col2 g-mb10">可视化自定义搭建</p>
+                <p class="k-fs24 col3 l-height36">完全可视化操作，可任意拖拽修改，操作高效便捷</p>
+            </div>
+        </li>
+        <li class="wz-2f-item g-flex">
+            <span class="wz-in1-dzj"></span>
+            <div class="flex1">
+                <p claas="k-fs26 col2 g-mb10">8大组件</p>
+                <p class="k-fs24 col3 l-height36">可任意组合使用，自定义强，满足您的个性化需求</p>
+            </div>
+        </li>
+        <li class="wz-2f-item g-flex">
+            <span class="wz-in1-ddd"></span>
+            <div class="flex1">
+                <p claas="k-fs26 col2 g-mb10">7大表单</p>
+                <p class="k-fs24 col3 l-height36">自定义表单，收集您要的任何客户数据</p>
+            </div>
+        </li>
+        <li class="wz-2f-item g-flex">
+            <span class="wz-in1-hymb"></span>
+            <div class="flex1">
+                <p claas="k-fs26 col2 g-mb10">行业模版</p>
+                <p class="k-fs24 col3 l-height36">近100套行业模版，支持26个行业，可一键使用，3分钟就能生成官网小程序</p>
+            </div>
+        </li>
+        <li class="wz-2f-item g-flex">
+            <span class="wz-in1-sjfx"></span>
+            <div class="flex1">
+                <p claas="k-fs26 col2 g-mb10">数据分析</p>
+                <p class="k-fs24 col3 l-height36">通过全面的数据分析，了解您的客户，了解您的微站，做精准运营</p>
+            </div>
+        </li>
+        <li class="wz-2f-item g-flex">
+            <span class="wz-in1-dllrk"></span>
+            <div class="flex1">
+                <p claas="k-fs26 col2 g-mb10">多流量入口</p>
+                <p class="k-fs24 col3 l-height36">40个流量入口之多，强大的品牌宣传渠道</p>
+            </div>
+        </li>
+    </ul>
+</div>
+<div class="wz-3f-wrap">
+    <p class="wz-3f-title g-pt80 g-mb80 g-tac k-fs36 l-height30 k-fcw">适用行业</p>
+    <ul class="g-col-4">
+        <li class="wz-3f-item">
+            <div class="wz-qygw"></div>
+            <p>企业官网</p>
+        </li>
+        <li class="wz-3f-item">
+            <div class="wz-jdbg"></div>
+            <p>酒店宾馆</p>
+        </li>
+        <li class="wz-3f-item">
+            <div class="wz-hssy"></div>
+            <p>婚纱摄影</p>
+        </li>
+        <li class="wz-3f-item">
+            <div class="wz-jr"></div>
+            <p>金融</p>
+        </li>
+        <li class="wz-3f-item">
+            <div class="wz-fc"></div>
+            <p>房产</p>
+        </li>
+        <li class="wz-3f-item">
+            <div class="wz-jy"></div>
+            <p>教育</p>
+        </li>
+        <li class="wz-3f-item">
+            <div class="wz-qc"></div>
+            <p>汽车</p>
+        </li>
+        <li class="wz-3f-item">
+            <div class="wz-gd"></div>
+            <p>更多</p>
+        </li>
+    </ul>
+</div>
+<!-- 服务支持 -->
+<div class="wfs-7f-wrap h-oh g-tac k-fcw">
+    <p class="g-mt80 g-mb20 k-fs36 col2">服务支持</p>
+    <p class="k-fs24 col2 g-mb70">多方位、多角度提供服务支持</p>
+    <div class="wds-7f-dei-wrap">
+        <div class="wds-7f-dei g-flex g-mb90 i-al">
+            <div class="wz-4f-img wz-fwzd"></div>
+            <p class="flex1">
+                <span>服务指导</span>
+                <span class="wds-texts g-mt10">一对一客服在线产品上手培训</span>
+            </p>
+        </div>
+        <div class="wds-7f-dei g-flex g-mb90  i-al">
+            <div class="wz-4f-img wz-yypx"></div>
+            <p class="flex1">
+                <span>运营培训</span>
+                <span class="wds-texts g-mt10">线上、线下实战培训，全国百场互动分享嘉宾、大咖分享</span>
+            </p>
+        </div>
+        <div class="wds-7f-dei g-flex g-mb70  i-al">
+            <div class="wz-4f-img wz-llzc"></div>
+            <p class="flex1">
+                <span>流量支持</span>
+                <span class="wds-texts g-mt10">大号免费推送异业合作</span>
+            </p>
+        </div>
+    </div>
+</div>
+<div class="lst-mu-layer"></div>
+
+<div class="m-foot g-tac f-oh">
+    <div class="reg-footer s1 g-plr k-fs24 g-mt40">
+        <p>Copyright © 2011-2019 www.weimob.com. All Rights Reserved</p>
+        <p>上海微盟企业发展有限公司版权所有 沪ICP备14044897号-9</p>
+    </div>
+    <p class="k-fc-gy9 g-mt30">举报电话：<a href="tel:02180356016"  class="k-fc-gy9">02180356016</a><a href="https://mp.weixin.qq.com/s/zqHBfGrbFcNrhpor-8pwFw" class="k-fc-gy9 g-ml20">举报受理和处置管理办法</a></p>
+</div>
+
+<div class="m-mask-box bgw js-tip" style="display: none;">
+    <div class="m-tip js-tip-txt"></div>
+</div>
+<div class="register-popup">
+    <div class="register-cont-wrap">
+        <!--注册窗-->
+        <div class="reg-details-wrap">
+            <div class="reg-details-t g-flex i-al">
+                <span class="reg-details-t-com col2 k-fs46">免费预约试用</span>
+            </div>
+            <form id="regForm" class="reg-details-com">
+                <div class="reg-num-wrap g-flex reg-bc  f-oh g-mb30" id="reg-num-wrap">
+                    <select id="zone" class="reg-select k-fs30 col2" name="zone">
+                        <option value="0086">中国大陆(86)</option>
+                        <option value="00886">中国台湾(886)</option>
+                        <option value="00852">中国香港(852)</option>
+                        <option value="00853">中国澳门(853)</option>
+                    </select>
+                    <input type="number" id="phone" name="phone" class="reg-details-phone k-fs30"  maxlength="11" placeholder="手机号"/>
+                </div>
+                <p class="reg-details-code reg-wh g-mb30">
+                    <input type="number" name="code" id="code" maxlength="4" class="reg-details-coder reg-wh2 k-fs30 reg-pl reg-bc g-rmA reg-bc " placeholder="请填写短信验证码">
+                    <input type="button" id="getCode" class="reg-btn-coder reg-bc g-rmA reg-h col2 k-fs30 reg-wh3" value="获取验证码"/>
+
+                </p>
+                <p class="f-pr g-mb30">
+                    <span style="position:absolute;left:0;right: 0;top:0;bottom: 0;" class="js-area-trg"></span>
+                    <input type="text" id="address" name="address" readonly="readonly"
+                    class="reg-details-add reg-bc reg-pl reg-wh k-fs30 g-rmA" placeholder="请选择省 / 市 / 区">
+                    <span class="f-pa register-errow"></span>
+                </p>
+
+                <input type="button" id="formSubmit" class="reg-btn-com k-fs36" value="提交">
+                <input type="hidden" name="province" id="province" value=""/>
+                <input type="hidden" name="city" id="city" value=""/>
+                <input type="hidden" name="region" id="region" value=""/>
+                <input type="hidden" name="provinceName" id="provinceName" value=""/>
+                <input type="hidden" name="cityName" id="cityName" value=""/>
+                <input type="hidden" name="regionName" id="regionName" value=""/>
+                <input type="hidden" name="solutionId" id="solutionId" value="32"/>
+            </form>
+        </div>
+        <!--关闭按钮-->
+        <div class="m-box-close-btn js-box-close">
+            <img class="" src="/img/home/close.png">
+        </div>
+    </div>
+</div>
+<!--提示信息-->
+<div class="m-mask-box bgw js-tip" style="display: none;">
+    <div class="m-tip js-tip-txt"></div>
+</div>
+
+<div class="reg-trigger-alt"></div>
+<div class="reg-line-phone-wrap">
+    <a href="javascript:;" class="js-udesk-aux" event-bind="reg" data-wmdot="tap" data-wmdot-id="online_consult_rgt">
+        免费预约试用
+    </a>
+</div>
+
+<script type="text/javascript" src="/build/js/zepto-d10f5e6501.js"></script>
+<script type="text/javascript" src="/build/js/touch-26022f6853.js"></script>
+<script type="text/javascript" src="/build/js/area-e2803efcb8.js"></script>
+<script type="text/javascript" src="/build/js/common-06fb588719.js"></script>
+<script type="text/javascript" src="/build/js/reg-b31534d390.js"></script>
+
+<script type="text/javascript" src="/build/js/wmdot-0a7204cf37.js" id="wmdot" data-env="production" ></script>
+<script type="text/javascript" src="/build/js/swiper-c5abbf38cb.js"></script>
+<script type="text/javascript">
+    var swiperLists = ["#sw-meet1"];
+    $(function () {
+        // 初始化 swiper
+        for (var i in swiperLists) {
+            new Swiper(swiperLists[i], {
+                slidesPerView: 'auto',
+                freeMode: true
+            })
+        }
+    });
+</script>
+</body>
+</html>

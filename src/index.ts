@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
+import { logger } from 'hono/logger';
 import pool, { initDB } from './db.js';
 import fs from 'fs';
 import path from 'path';
@@ -10,9 +11,12 @@ import OSS from 'ali-oss';
 import { queryThemes, toPublicTheme, toPublicThemeDetail, toAdminTheme } from './services/theme.service.js';
 import mpRoutes from './routes/mp.js';
 import admin305Routes from './routes/admin305.js';
+import api3Routes from './routes/api3.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = new Hono();
+
+app.use('*', logger());
 
 app.use('*', cors());
 
@@ -29,7 +33,20 @@ const ossClient = new OSS({
 const uploadDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-app.use('/uploads/*', serveStatic({ root: path.join(__dirname, '..') }));
+app.onError((err, c) => {
+    console.error(`[GLOBAL ERROR] ${c.req.method} ${c.req.url}:`, err);
+    return c.json({ errcode: 500, errmsg: err.message }, 500);
+});
+
+app.use('/uploads/*', serveStatic({ root: './' }));
+app.use('/assets/*', async (c, next) => {
+    const filePath = path.join(process.cwd(), 'public', c.req.path);
+    if (!fs.existsSync(filePath)) {
+        console.warn(`[ASSETS] File not found: ${filePath}`);
+        return c.json({ errcode: 404, errmsg: 'File not found' }, 404);
+    }
+    return serveStatic({ root: './public' })(c, next);
+});
 
 // ============================================================
 // 辅助函数
@@ -1367,6 +1384,7 @@ app.post('/api/upload', authMiddleware, async (c) => {
 // ============================================================
 app.route('/api/mp', mpRoutes);          // 小程序端接口
 app.route('/api/admin', admin305Routes); // CMS管理端扩展接口（需认证，复用 authMiddleware）
+app.route('/api3', api3Routes);          // 0305 1:1 模拟接口
 
 // ============================================================
 // 启动

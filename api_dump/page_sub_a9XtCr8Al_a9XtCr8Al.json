@@ -1,0 +1,347 @@
+{
+  "errcode": 0,
+  "errmsg": "",
+  "data": {
+    "id": 63620969,
+    "pageId": 3781700,
+    "zhanId": 1769387,
+    "title": null,
+    "name": "10周年特惠婚庆套餐",
+    "parentId": 3693398,
+    "index": 4,
+    "wid": 10838588381,
+    "cover": "",
+    "hash": "a9XtCr8Al",
+    "pid": 4022029389381,
+    "elements": [
+      {
+        "css": {},
+        "type": 3,
+        "isThin": true,
+        "properties": {
+          "background": {}
+        }
+      },
+      {
+        "id": 171377185873148060,
+        "css": {
+          "width": 375,
+          "height": 530.3808948004837,
+          "boxShadow": "none",
+          "lineHeight": 1,
+          "paddingTop": 0,
+          "borderColor": "rgba(0, 0, 0, 1)",
+          "borderStyle": "",
+          "borderWidth": 0,
+          "paddingLeft": 0,
+          "borderRadius": 0,
+          "paddingRight": 0,
+          "boxShadowType": "boxShadow",
+          "paddingBottom": 0,
+          "boxShadowAngle": 0,
+          "boxShadowColor": "rgba(0,0,0,1)"
+        },
+        "num": 1,
+        "pid": 4022029389381,
+        "code": "image_comp",
+        "show": true,
+        "type": 4,
+        "title": "图片",
+        "active": true,
+        "canUse": true,
+        "events": {
+          "link": {
+            "prefix": "none",
+            "openPage": true
+          }
+        },
+        "zhanId": 1848617,
+        "animate": {
+          "type": "",
+          "delay": 0,
+          "style": "",
+          "offset": 0,
+          "duration": 2,
+          "iteration": 1
+        },
+        "dorpType": [
+          "thin_page",
+          "draw",
+          "dialog"
+        ],
+        "elements": [],
+        "pageSign": "thin",
+        "defaultUrl": "//cdn2.weimob.com/saas/saas-fe-sirius-orion-node/production/349/changjingdouditu750_500.png",
+        "properties": {
+          "src": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/sub_a9xtcr8al_imgstylebg-1773508469856.png",
+          "isFixed": 0,
+          "accredit": false,
+          "imgStyle": {
+            "width": 375,
+            "height": 530.3808948004837,
+            "marginTop": 0,
+            "marginLeft": 0
+          },
+          "defaultSrc": "",
+          "imgStyleBg": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/sub_a9xtcr8al_imgstylebg-1773508469856.png",
+          "coverage_name": "99888"
+        },
+        "showClickEventList": false
+      }
+    ],
+    "share": {},
+    "tsaOpen": false,
+    "tsa_count": null,
+    "tsaId": null,
+    "isThin": true,
+    "properties": null,
+    "extend": {
+      "header": {
+        "css": {
+          "lineHeight": 1,
+          "borderStyle": "",
+          "borderWidth": 0,
+          "boxShadowAngle": 0
+        },
+        "pid": 4022029389381,
+        "type": "navHeader",
+        "events": {},
+        "zhanId": 1848617,
+        "properties": {
+          "icon": {
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"17px\" height=\"17px\" viewBox=\"0 0 17 17\" version=\"1.1\"><title>返回按钮复制</title><desc>Created with Sketch.</desc><g id=\"v4.18\" stroke=\"none\" stroke-width=\"1\"><g id=\"返回按钮复制\" transform=\"translate(4.000000, 1.000000)\" fill=\"#FFFFFF\" fill-rule=\"nonzero\"><polygon id=\"Path-3\" points=\"9 13.1318908 7.51665835 14.5 0 7.4441762 7.39771875 0.5 8.8810604 1.86810921 2.9408057 7.4441762\" /></g></g></svg>",
+            "items": [
+              {
+                "fill": "#FFFFFF",
+                "svgFill": "#FFFFFF",
+                "elements": [
+                  0
+                ]
+              }
+            ],
+            "svgbg": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB3aWR0aD0iMTdweCIgaGVpZ2h0PSIxN3B4IiB2aWV3Qm94PSIwIDAgMTcgMTciIHZlcnNpb249IjEuMSI+PCEtLSBHZW5lcmF0b3I6IFNrZXRjaCA1NC4xICg3NjQ5MCkgLSBodHRwczovL3NrZXRjaGFwcC5jb20gLS0+PHRpdGxlPui/lOWbnuaMiemSruWkjeWItjwvdGl0bGU+PGRlc2M+Q3JlYXRlZCB3aXRoIFNrZXRjaC48L2Rlc2M+PGcgaWQ9InY0LjE4IiBzdHJva2U9Im5vbmUiIHN0cm9rZS13aWR0aD0iMSI+PGcgaWQ9Iui/lOWbnuaMiemSruWkjeWItiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNC4wMDAwMDAsIDEuMDAwMDAwKSIgZmlsbD0iI0ZGRkZGRiIgZmlsbC1ydWxlPSJub256ZXJvIj48cG9seWdvbiBpZD0iUGF0aC0zIiBwb2ludHM9IjkgMTMuMTMxODkwOCA3LjUxNjY1ODM1IDE0LjUgMCA3LjQ0NDE3NjIgNy4zOTc3MTg3NSAwLjUgOC44ODEwNjA0IDEuODY4MTA5MjEgMi45NDA4MDU3IDcuNDQ0MTc2MiIvPjwvZz48L2c+PC9zdmc+",
+            "events": {
+              "link": {
+                "prefix": "goback",
+                "openPage": true
+              }
+            },
+            "goback": true,
+            "showClickEventList": true
+          },
+          "title": {},
+          "search": {},
+          "miniSrc": "//cdn.weimob.com/saas/zhan/images/4.18/mini-white.png",
+          "navName": "婚博会套餐",
+          "navigationStyleType": 5,
+          "navigationBarTextStyle": "white",
+          "navigationBarTitleText": "伊铭萱婚庆",
+          "navigationBarTitleTextType": "2",
+          "navigationBarBackgroundColor": "#000000"
+        }
+      },
+      "pageLiveSessionsIds": [],
+      "pageKnowledgeGoodsIds": []
+    },
+    "useComponents": {},
+    "createdAt": "2024-04-22T07:43:53.336Z",
+    "updatedAt": "2026-01-21T10:39:37.640Z",
+    "deletedAt": null,
+    "counterIds": [],
+    "hasPayInfo": {
+      "hasPay": true,
+      "hasQualification": true
+    },
+    "isExpired": false,
+    "footer": {
+      "type": "1",
+      "weburl": "https://m2.n.weimob.com/wz?channelTag="
+    },
+    "header": {
+      "navigationBarTextStyle": "white",
+      "navigationBarTitleText": "伊铭萱婚庆",
+      "navigationBarTitleTextType": "2",
+      "navigationBarBackgroundColor": "#000000"
+    },
+    "solutionInfo": {
+      "canUseImageCompress": true,
+      "canUseCopyrightLink": true,
+      "weburl": "https://m2.n.weimob.com/wz?channelTag=",
+      "canUseAutoDialog": true,
+      "canUseNavHeader": true,
+      "canBottomCopyRightCtrl": true,
+      "canUseOverseasAddress": true,
+      "canUseInternationalNumber": true,
+      "canUseAnimate": true,
+      "componentConfig": [
+        {
+          "code": "image_comp",
+          "canUse": "true",
+          "isChecked": true,
+          "isNewComp": false,
+          "clickEvent": [
+            {
+              "code": "click_none",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "pages",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "phone",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "address",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "share",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "timeline",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "shareAndTimeline",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "service",
+              "canUse": "1",
+              "isChecked": true,
+              "needAccredit": "1"
+            },
+            {
+              "code": "preview",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "miniprog",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "weichatFans",
+              "canUse": "1",
+              "isChecked": true
+            },
+            {
+              "code": "cms",
+              "canUse": "1",
+              "isChecked": true
+            },
+            {
+              "code": "businessrelated",
+              "canUse": 1
+            },
+            {
+              "code": "live",
+              "canUse": "1",
+              "isChecked": true,
+              "needAccredit": 1
+            },
+            {
+              "code": "dialog",
+              "canUse": "1",
+              "isChecked": true
+            },
+            {
+              "code": "activity",
+              "canUse": "1",
+              "isChecked": true,
+              "needAccredit": "1"
+            },
+            {
+              "code": "tool",
+              "canUse": "1",
+              "isChecked": true,
+              "needAccredit": "1"
+            },
+            {
+              "code": "mobile",
+              "canUse": "1",
+              "isChecked": true
+            },
+            {
+              "code": "article",
+              "canUse": "1",
+              "isChecked": true
+            },
+            {
+              "code": "knowledge",
+              "canUse": "1",
+              "isChecked": true,
+              "needAccredit": "1"
+            },
+            {
+              "code": "anchor",
+              "canUse": "1",
+              "isChecked": true
+            },
+            {
+              "code": "poster",
+              "canUse": "1",
+              "isChecked": true
+            },
+            {
+              "code": "pay",
+              "canUse": "1",
+              "isChecked": true,
+              "needAccredit": "0"
+            },
+            {
+              "code": "personalCenter",
+              "canUse": 1,
+              "isChecked": true,
+              "needAccredit": "1"
+            },
+            {
+              "code": "exam",
+              "canUse": 1,
+              "isChecked": true,
+              "needAccredit": "1"
+            }
+          ],
+          "isShowInThin": true,
+          "isShowInAppoinment": false,
+          "isShowInChargeAptmt": false,
+          "isShowInContractForm": false
+        }
+      ]
+    },
+    "ad": {
+      "whiteList": [],
+      "isLimitUrl": false
+    },
+    "countDatas": [],
+    "productMap": {},
+    "paymentSwitch": false,
+    "allNavMap": {
+      "3k3hPNEP-": 3807809,
+      "6oyUho_w-": 3807809,
+      "8gxow27V9": 3807809,
+      "FSE5xedRI": 3807809,
+      "vRtjqXHvz": 3807807,
+      "ynk_xR2pA": 3807808
+    },
+    "formCountData": [],
+    "bcClientData": {
+      "checked": 1,
+      "logo": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/home_logo-1773508463353.png",
+      "title": "微盟提供技术支持",
+      "width": 750,
+      "height": 164
+    }
+  }
+}

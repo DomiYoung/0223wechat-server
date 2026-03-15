@@ -6,6 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Single-process Hono API service for a wedding mini-program frontend and an Admin CMS.
 - Main runtime entry is `src/index.ts`, serving both public and admin routes on port 8199.
 
+## Environment URLs
+- **API 服务端**: `https://wedding.domiyoung.com` (port 8199)
+- **CMS 管理后台**: `https://wcms.domiyoung.com`
+- **小程序前端**: 微信开发者工具上传，项目目录 `0223wechat/`
+
 ## Codebase Rules (CRITICAL)
 1. **Port**: The application MUST run on port `8199`. Do not use `3000` or change it.
 2. **Package Manager**: Always use `bun` for managing dependencies and running scripts (e.g., `bun install`, `bun run dev`, `bun run build`). Do NOT use `npm`.

@@ -1,0 +1,2559 @@
+{
+  "errcode": 0,
+  "errmsg": "",
+  "data": {
+    "id": 63620929,
+    "pageId": 3709570,
+    "zhanId": 1769387,
+    "title": null,
+    "name": "圣拉维婚礼艺术中心",
+    "parentId": 0,
+    "index": 17,
+    "wid": 10838588381,
+    "cover": "",
+    "hash": "1lLqakBi1",
+    "pid": 4022029389381,
+    "elements": [
+      {
+        "css": {},
+        "type": 3,
+        "isThin": true,
+        "properties": {
+          "background": {}
+        }
+      },
+      {
+        "id": 170252653457879070,
+        "css": {
+          "width": 375,
+          "height": 374
+        },
+        "pid": 4022029389381,
+        "code": "draw_comp",
+        "show": true,
+        "type": "draw",
+        "title": "画板1",
+        "canUse": true,
+        "events": {
+          "link": {
+            "prefix": ""
+          }
+        },
+        "isThin": true,
+        "zhanId": 1848617,
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [
+          {
+            "id": 170252653457886050,
+            "css": {
+              "width": 375,
+              "height": 374,
+              "zIndex": 0
+            },
+            "type": "offset",
+            "properties": {}
+          },
+          {
+            "css": {
+              "zIndex": 0
+            },
+            "type": 3,
+            "properties": {
+              "type": "",
+              "color": "",
+              "imgSrc": "",
+              "bgColor": "",
+              "bgColorType": ""
+            }
+          },
+          {
+            "id": 170252657324528060,
+            "css": {
+              "top": 0,
+              "left": 0,
+              "width": 375,
+              "height": 236,
+              "zIndex": 2,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderColor": "rgba(0, 0, 0, 1)",
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "borderRadius": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "num": 1,
+            "pid": 4022029389381,
+            "code": "image_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 4,
+            "title": "图片",
+            "active": true,
+            "canUse": true,
+            "events": {
+              "link": {
+                "prefix": "none",
+                "openPage": true
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "//cdn2.weimob.com/saas/saas-fe-sirius-orion-node/production/349/changjingdouditu750_500.png",
+            "properties": {
+              "src": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/sub_1llqakbi1_imgstylebg-1773508474390.jpg",
+              "isFixed": 0,
+              "accredit": false,
+              "imgStyle": {
+                "width": 375,
+                "height": 250,
+                "marginTop": -7,
+                "marginLeft": 0
+              },
+              "defaultSrc": "",
+              "imgStyleBg": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/sub_1llqakbi1_imgstylebg-1773508474390.jpg",
+              "coverage_name": ""
+            },
+            "showClickEventList": false
+          },
+          {
+            "id": 170252665978941500,
+            "css": {
+              "top": 315,
+              "left": 18,
+              "color": "#000000",
+              "width": 150,
+              "height": 39,
+              "zIndex": 4,
+              "fontSize": 16,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "pid": 4022029389381,
+            "code": "text_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 2,
+            "title": "富文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "url": [
+                  {
+                    "id": 3710712,
+                    "hash": "wLK5_8tRM",
+                    "name": "海岛店"
+                  }
+                ],
+                "canUse": true,
+                "prefix": "#pages"
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "<p style=\"font-size:16px;\"><span style=\"font-size: 16px; line-height: 14px;\">﻿</span><span style=\"line-height: 14px;\">﻿</span><b><span style=\"font-size: 20px;\"><br></span></b></p><p style=\"font-size:16px;\"><b><span style=\"font-size: 18px; line-height: 14px;\">门店地图</span></b><span style=\"line-height: 14px;\">﻿</span><span style=\"line-height: 21px;\">﻿</span></p>",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "",
+            "properties": {}
+          },
+          {
+            "id": 170252672594237120,
+            "css": {
+              "top": 319,
+              "left": 120,
+              "color": "#000000",
+              "width": 150,
+              "height": 40,
+              "zIndex": 5,
+              "fontSize": 16,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "pid": 4022029389381,
+            "code": "text_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 2,
+            "title": "富文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "canUse": true,
+                "prefix": "service"
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "<p style=\"font-size:16px;\"><span style=\"font-size: 16px;\">﻿</span><b><span style=\"font-size: 18px;\"><br></span></b></p><p style=\"font-size:16px;\"><b><span style=\"font-size: 18px; line-height: 14px;\">联系在线客服</span></b></p>",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "",
+            "properties": {}
+          },
+          {
+            "id": 170252765302005000,
+            "css": {
+              "top": 250,
+              "left": 19,
+              "color": "#000000",
+              "width": 261,
+              "height": 72,
+              "zIndex": 6,
+              "fontSize": 14,
+              "boxShadow": "none",
+              "textAlign": "left",
+              "lineHeight": 24,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "borderRadius": "",
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)",
+              "backgroundColor": ""
+            },
+            "num": 1,
+            "pid": 4022029389381,
+            "code": "text_single_comp",
+            "mode": "draw",
+            "show": true,
+            "type": "text",
+            "title": "文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "prefix": "",
+                "openPage": true
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "圣拉维海岛店\n浦东新区成山路216号\n地铁8号线成山路站",
+            "display": "",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "properties": {
+              "isFixed": 0,
+              "accredit": false,
+              "showLines": 3,
+              "foldSwitch": false,
+              "coverage_name": "默认文本"
+            }
+          }
+        ],
+        "pageSign": "thin",
+        "properties": {}
+      },
+      {
+        "id": 170252776431298940,
+        "css": {
+          "width": 375,
+          "height": 24,
+          "overflow": "hidden",
+          "boxShadow": "none",
+          "textAlign": "center",
+          "lineHeight": 1,
+          "paddingTop": 0,
+          "borderStyle": "",
+          "borderWidth": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "boxShadowType": "boxShadow",
+          "paddingBottom": 0,
+          "boxShadowAngle": 0,
+          "boxShadowColor": "rgba(0,0,0,1)"
+        },
+        "num": 1,
+        "pid": 4022029389381,
+        "code": "splitline_comp",
+        "show": true,
+        "type": "splitline",
+        "title": "分割线",
+        "active": true,
+        "canUse": true,
+        "events": {
+          "link": {
+            "openPage": true
+          }
+        },
+        "zhanId": 1848617,
+        "display": "",
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [],
+        "pageSign": "thin",
+        "properties": {
+          "color": "#333333",
+          "isFixed": 0,
+          "accredit": false,
+          "lineWidth": 375,
+          "styleType": "solid",
+          "lineHeight": 2
+        }
+      },
+      {
+        "id": 170252803579774300,
+        "css": {
+          "width": 375,
+          "height": 50,
+          "boxShadow": "none",
+          "lineHeight": 1,
+          "paddingTop": 0,
+          "borderStyle": "",
+          "borderWidth": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "boxShadowType": "boxShadow",
+          "paddingBottom": 0,
+          "boxShadowAngle": 0,
+          "boxShadowColor": "rgba(0,0,0,1)"
+        },
+        "num": 1,
+        "pid": 4022029389381,
+        "code": "blank_comp",
+        "show": true,
+        "type": "blank",
+        "title": "留白",
+        "active": true,
+        "canUse": true,
+        "events": {
+          "link": {
+            "openPage": true
+          }
+        },
+        "zhanId": 1848617,
+        "display": "",
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [],
+        "pageSign": "thin",
+        "properties": {
+          "isFixed": 0,
+          "accredit": false
+        }
+      },
+      {
+        "id": 170252790732764600,
+        "css": {
+          "width": 375,
+          "height": 371
+        },
+        "pid": 4022029389381,
+        "code": "draw_comp",
+        "show": true,
+        "type": "draw",
+        "title": "画板1",
+        "canUse": true,
+        "events": {
+          "link": {
+            "prefix": ""
+          }
+        },
+        "isThin": true,
+        "zhanId": 1848617,
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [
+          {
+            "id": 170252790732746700,
+            "css": {
+              "width": 375,
+              "height": 371,
+              "zIndex": 0
+            },
+            "type": "offset",
+            "properties": {
+              "coverage_name": ""
+            }
+          },
+          {
+            "id": 170252790732791600,
+            "css": {
+              "zIndex": 0
+            },
+            "type": 3,
+            "properties": {
+              "type": "",
+              "color": "",
+              "imgSrc": "",
+              "bgColor": "",
+              "bgColorType": "",
+              "coverage_name": ""
+            }
+          },
+          {
+            "id": 170252790732761020,
+            "css": {
+              "top": 0,
+              "left": 0,
+              "width": 375,
+              "height": 248,
+              "zIndex": 2,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderColor": "rgba(0, 0, 0, 1)",
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "borderRadius": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "num": 1,
+            "pid": 4022029389381,
+            "code": "image_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 4,
+            "title": "图片",
+            "active": true,
+            "canUse": true,
+            "events": {
+              "link": {
+                "prefix": "none",
+                "openPage": true
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "//cdn2.weimob.com/saas/saas-fe-sirius-orion-node/production/349/changjingdouditu750_500.png",
+            "properties": {
+              "src": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/sub_1llqakbi1_imgstylebg-1773508474390.jpg",
+              "isFixed": 0,
+              "accredit": false,
+              "imgStyle": {
+                "width": 375,
+                "height": 250,
+                "marginTop": -1,
+                "marginLeft": 0
+              },
+              "defaultSrc": "",
+              "imgStyleBg": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/sub_1llqakbi1_imgstylebg-1773508474390.jpg",
+              "coverage_name": "YUL_0176"
+            },
+            "showClickEventList": false
+          },
+          {
+            "id": 170252790732780960,
+            "css": {
+              "top": 315,
+              "left": 18,
+              "color": "#000000",
+              "width": 150,
+              "height": 48,
+              "zIndex": 4,
+              "fontSize": 16,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "pid": 4022029389381,
+            "code": "text_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 2,
+            "title": "富文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "url": [
+                  {
+                    "id": 3709693,
+                    "hash": "CDUSCq5I_",
+                    "name": "滨江店地图"
+                  }
+                ],
+                "canUse": true,
+                "prefix": "#pages"
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "<p style=\"font-size:16px;\"><span style=\"font-size: 16px; line-height: 14px;\">﻿</span><span style=\"line-height: 14px;\">﻿</span><b><span style=\"font-size: 20px;\"><br></span></b></p><p style=\"font-size:16px;\"><b><span style=\"font-size: 18px; line-height: 14px;\">门店地图</span></b><span style=\"line-height: 14px;\">﻿</span><span style=\"line-height: 21px;\">﻿</span></p>",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "",
+            "properties": {
+              "coverage_name": "富文本"
+            }
+          },
+          {
+            "id": 170252790732745300,
+            "css": {
+              "top": 319,
+              "left": 120,
+              "color": "#000000",
+              "width": 150,
+              "height": 43,
+              "zIndex": 5,
+              "fontSize": 16,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "pid": 4022029389381,
+            "code": "text_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 2,
+            "title": "富文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "canUse": true,
+                "prefix": "service"
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "<p style=\"font-size:16px;\"><span style=\"font-size: 16px;\">﻿</span><b><span style=\"font-size: 18px;\"><br></span></b></p><p style=\"font-size:16px;\"><b><span style=\"font-size: 18px; line-height: 14px;\">联系在线客服</span></b></p>",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "",
+            "properties": {
+              "coverage_name": "富文本"
+            }
+          },
+          {
+            "id": 170252790732715360,
+            "css": {
+              "top": 255,
+              "left": 19,
+              "color": "#000000",
+              "width": 261,
+              "height": 72,
+              "zIndex": 6,
+              "fontSize": 14,
+              "boxShadow": "none",
+              "textAlign": "left",
+              "lineHeight": 24,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "borderRadius": "",
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)",
+              "backgroundColor": ""
+            },
+            "num": 1,
+            "pid": 4022029389381,
+            "code": "text_single_comp",
+            "mode": "draw",
+            "show": true,
+            "type": "text",
+            "title": "文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "prefix": "",
+                "openPage": true
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "圣拉维滨江店\n浦东新区世博大道168号\n地铁四号线（塘桥站）",
+            "display": "",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "properties": {
+              "isFixed": 0,
+              "accredit": false,
+              "showLines": 3,
+              "foldSwitch": false,
+              "coverage_name": "默认文本"
+            }
+          }
+        ],
+        "pageSign": "thin",
+        "properties": {}
+      },
+      {
+        "id": 170252802278824420,
+        "css": {
+          "width": 375,
+          "height": 24,
+          "overflow": "hidden",
+          "boxShadow": "none",
+          "textAlign": "center",
+          "lineHeight": 1,
+          "paddingTop": 0,
+          "borderStyle": "",
+          "borderWidth": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "boxShadowType": "boxShadow",
+          "paddingBottom": 0,
+          "boxShadowAngle": 0,
+          "boxShadowColor": "rgba(0,0,0,1)"
+        },
+        "num": 1,
+        "pid": 4022029389381,
+        "code": "splitline_comp",
+        "show": true,
+        "type": "splitline",
+        "title": "分割线",
+        "active": true,
+        "canUse": true,
+        "events": {
+          "link": {
+            "openPage": true
+          }
+        },
+        "zhanId": 1848617,
+        "display": "",
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [],
+        "pageSign": "thin",
+        "properties": {
+          "color": "#333333",
+          "isFixed": 0,
+          "accredit": false,
+          "lineWidth": 375,
+          "styleType": "solid",
+          "lineHeight": 2
+        }
+      },
+      {
+        "id": 170253413819428200,
+        "css": {
+          "width": 375,
+          "height": 50,
+          "boxShadow": "none",
+          "lineHeight": 1,
+          "paddingTop": 0,
+          "borderStyle": "",
+          "borderWidth": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "boxShadowType": "boxShadow",
+          "paddingBottom": 0,
+          "boxShadowAngle": 0,
+          "boxShadowColor": "rgba(0,0,0,1)"
+        },
+        "num": 1,
+        "pid": 4022029389381,
+        "code": "blank_comp",
+        "show": true,
+        "type": "blank",
+        "title": "留白",
+        "active": true,
+        "canUse": true,
+        "events": {
+          "link": {
+            "openPage": true
+          }
+        },
+        "zhanId": 1848617,
+        "display": "",
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [],
+        "pageSign": "thin",
+        "properties": {
+          "isFixed": 0,
+          "accredit": false
+        }
+      },
+      {
+        "id": 170253415132209950,
+        "css": {
+          "width": 375,
+          "height": 371
+        },
+        "pid": 4022029389381,
+        "code": "draw_comp",
+        "show": true,
+        "type": "draw",
+        "title": "画板1",
+        "canUse": true,
+        "events": {
+          "link": {
+            "prefix": ""
+          }
+        },
+        "isThin": true,
+        "zhanId": 1848617,
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [
+          {
+            "id": 170253415132214530,
+            "css": {
+              "width": 375,
+              "height": 371,
+              "zIndex": 0
+            },
+            "type": "offset",
+            "properties": {
+              "coverage_name": ""
+            }
+          },
+          {
+            "id": 170253415132285500,
+            "css": {
+              "zIndex": 0
+            },
+            "type": 3,
+            "properties": {
+              "type": "",
+              "color": "",
+              "imgSrc": "",
+              "bgColor": "",
+              "bgColorType": "",
+              "coverage_name": ""
+            }
+          },
+          {
+            "id": 170253415132263360,
+            "css": {
+              "top": 0,
+              "left": 0,
+              "width": 375,
+              "height": 248,
+              "zIndex": 2,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderColor": "rgba(0, 0, 0, 1)",
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "borderRadius": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "num": 1,
+            "pid": 4022029389381,
+            "code": "image_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 4,
+            "title": "图片",
+            "active": true,
+            "canUse": true,
+            "events": {
+              "link": {
+                "prefix": "none",
+                "openPage": true
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "//cdn2.weimob.com/saas/saas-fe-sirius-orion-node/production/349/changjingdouditu750_500.png",
+            "properties": {
+              "src": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/sub_1llqakbi1_imgstylebg-1773508474391.jpg",
+              "isFixed": 0,
+              "accredit": false,
+              "imgStyle": {
+                "width": 375,
+                "height": 250,
+                "marginTop": -1,
+                "marginLeft": 0
+              },
+              "defaultSrc": "",
+              "imgStyleBg": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/sub_1llqakbi1_imgstylebg-1773508474391.jpg",
+              "coverage_name": "微信图片_20240915150010"
+            },
+            "showClickEventList": false
+          },
+          {
+            "id": 170253415132254880,
+            "css": {
+              "top": 315,
+              "left": 18,
+              "color": "#000000",
+              "width": 150,
+              "height": 39,
+              "zIndex": 4,
+              "fontSize": 16,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "pid": 4022029389381,
+            "code": "text_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 2,
+            "title": "富文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "url": [
+                  {
+                    "id": 3709696,
+                    "hash": "R9_NFlml6",
+                    "name": "宝山店地图"
+                  }
+                ],
+                "canUse": true,
+                "prefix": "#pages"
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "<p style=\"font-size:16px;\"><span style=\"font-size: 16px; line-height: 14px;\">﻿</span><span style=\"line-height: 14px;\">﻿</span><b><span style=\"font-size: 20px;\"><br></span></b></p><p style=\"font-size:16px;\"><b><span style=\"font-size: 18px; line-height: 14px;\">门店地图</span></b><span style=\"line-height: 14px;\">﻿</span><span style=\"line-height: 21px;\">﻿</span></p>",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "",
+            "properties": {
+              "coverage_name": "富文本"
+            }
+          },
+          {
+            "id": 170253415132243940,
+            "css": {
+              "top": 319,
+              "left": 120,
+              "color": "#000000",
+              "width": 150,
+              "height": 33,
+              "zIndex": 5,
+              "fontSize": 16,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "pid": 4022029389381,
+            "code": "text_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 2,
+            "title": "富文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "canUse": true,
+                "prefix": "service"
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "<p style=\"font-size:16px;\"><span style=\"font-size: 16px;\">﻿</span><b><span style=\"font-size: 18px;\"><br></span></b></p><p style=\"font-size:16px;\"><b><span style=\"font-size: 18px; line-height: 14px;\">联系在线客服</span></b></p>",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "",
+            "properties": {
+              "coverage_name": "富文本"
+            }
+          },
+          {
+            "id": 170253415132201630,
+            "css": {
+              "top": 255,
+              "left": 19,
+              "color": "#000000",
+              "width": 261,
+              "height": 72,
+              "zIndex": 6,
+              "fontSize": 14,
+              "boxShadow": "none",
+              "textAlign": "left",
+              "lineHeight": 24,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "borderRadius": "",
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)",
+              "backgroundColor": ""
+            },
+            "num": 1,
+            "pid": 4022029389381,
+            "code": "text_single_comp",
+            "mode": "draw",
+            "show": true,
+            "type": "text",
+            "title": "文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "prefix": "",
+                "openPage": true
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "圣拉维江景宴会中心\n浦东新区世博大道760号一号运动中心C栋\n地铁8号线中华艺术宫站",
+            "display": "",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "properties": {
+              "isFixed": 0,
+              "accredit": false,
+              "showLines": 3,
+              "foldSwitch": false,
+              "coverage_name": "默认文本"
+            }
+          }
+        ],
+        "pageSign": "thin",
+        "properties": {}
+      },
+      {
+        "id": 170253469927528830,
+        "css": {
+          "width": 375,
+          "height": 24,
+          "overflow": "hidden",
+          "boxShadow": "none",
+          "textAlign": "center",
+          "lineHeight": 1,
+          "paddingTop": 0,
+          "borderStyle": "",
+          "borderWidth": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "boxShadowType": "boxShadow",
+          "paddingBottom": 0,
+          "boxShadowAngle": 0,
+          "boxShadowColor": "rgba(0,0,0,1)"
+        },
+        "num": 1,
+        "pid": 4022029389381,
+        "code": "splitline_comp",
+        "show": true,
+        "type": "splitline",
+        "title": "分割线",
+        "active": true,
+        "canUse": true,
+        "events": {
+          "link": {
+            "openPage": true
+          }
+        },
+        "zhanId": 1848617,
+        "display": "",
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [],
+        "pageSign": "thin",
+        "properties": {
+          "color": "#333333",
+          "isFixed": 0,
+          "accredit": false,
+          "lineWidth": 375,
+          "styleType": "solid",
+          "lineHeight": 2
+        }
+      },
+      {
+        "id": 170253470246616580,
+        "css": {
+          "width": 375,
+          "height": 50,
+          "boxShadow": "none",
+          "lineHeight": 1,
+          "paddingTop": 0,
+          "borderStyle": "",
+          "borderWidth": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "boxShadowType": "boxShadow",
+          "paddingBottom": 0,
+          "boxShadowAngle": 0,
+          "boxShadowColor": "rgba(0,0,0,1)"
+        },
+        "num": 1,
+        "pid": 4022029389381,
+        "code": "blank_comp",
+        "show": true,
+        "type": "blank",
+        "title": "留白",
+        "active": true,
+        "canUse": true,
+        "events": {
+          "link": {
+            "openPage": true
+          }
+        },
+        "zhanId": 1848617,
+        "display": "",
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [],
+        "pageSign": "thin",
+        "properties": {
+          "isFixed": 0,
+          "accredit": false
+        }
+      },
+      {
+        "id": 170253471188068740,
+        "css": {
+          "width": 375,
+          "height": 371
+        },
+        "pid": 4022029389381,
+        "code": "draw_comp",
+        "show": true,
+        "type": "draw",
+        "title": "画板1",
+        "canUse": true,
+        "events": {
+          "link": {
+            "prefix": ""
+          }
+        },
+        "isThin": true,
+        "zhanId": 1848617,
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [
+          {
+            "id": 170253471188073280,
+            "css": {
+              "width": 375,
+              "height": 371,
+              "zIndex": 0
+            },
+            "type": "offset",
+            "properties": {
+              "coverage_name": ""
+            }
+          },
+          {
+            "id": 170253471188083740,
+            "css": {
+              "zIndex": 0
+            },
+            "type": 3,
+            "properties": {
+              "type": "",
+              "color": "",
+              "imgSrc": "",
+              "bgColor": "",
+              "bgColorType": "",
+              "coverage_name": ""
+            }
+          },
+          {
+            "id": 170253471188026050,
+            "css": {
+              "top": 0,
+              "left": 0,
+              "width": 375,
+              "height": 248,
+              "zIndex": 2,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderColor": "rgba(0, 0, 0, 1)",
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "borderRadius": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "num": 1,
+            "pid": 4022029389381,
+            "code": "image_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 4,
+            "title": "图片",
+            "active": true,
+            "canUse": true,
+            "events": {
+              "link": {
+                "prefix": "none",
+                "openPage": true
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "//cdn2.weimob.com/saas/saas-fe-sirius-orion-node/production/349/changjingdouditu750_500.png",
+            "properties": {
+              "src": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/sub_1llqakbi1_src-1773508474391.png",
+              "isFixed": 0,
+              "accredit": false,
+              "imgStyle": {
+                "width": 440,
+                "height": 248,
+                "marginTop": 0,
+                "marginLeft": -32
+              },
+              "defaultSrc": "",
+              "imgStyleBg": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/sub_1llqakbi1_src-1773508474391.png",
+              "coverage_name": "微信图片_20230711114544"
+            },
+            "showClickEventList": false
+          },
+          {
+            "id": 170253471188069220,
+            "css": {
+              "top": 315,
+              "left": 18,
+              "color": "#000000",
+              "width": 150,
+              "height": 39,
+              "zIndex": 4,
+              "fontSize": 16,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "pid": 4022029389381,
+            "code": "text_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 2,
+            "title": "富文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "url": [
+                  {
+                    "id": 3709697,
+                    "hash": "8TVOeprMo",
+                    "name": "世纪公园店地图"
+                  }
+                ],
+                "canUse": true,
+                "prefix": "#pages"
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "<p style=\"font-size:16px;\"><span style=\"font-size: 16px; line-height: 14px;\">﻿</span><span style=\"line-height: 14px;\">﻿</span><b><span style=\"font-size: 20px;\"><br></span></b></p><p style=\"font-size:16px;\"><b><span style=\"font-size: 18px; line-height: 14px;\">门店地图</span></b><span style=\"line-height: 14px;\">﻿</span><span style=\"line-height: 21px;\">﻿</span></p>",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "",
+            "properties": {
+              "coverage_name": "富文本"
+            }
+          },
+          {
+            "id": 170253471188113730,
+            "css": {
+              "top": 319,
+              "left": 120,
+              "color": "#000000",
+              "width": 150,
+              "height": 33,
+              "zIndex": 5,
+              "fontSize": 16,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "pid": 4022029389381,
+            "code": "text_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 2,
+            "title": "富文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "canUse": true,
+                "prefix": "service"
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "<p style=\"font-size:16px;\"><span style=\"font-size: 16px;\">﻿</span><b><span style=\"font-size: 18px;\"><br></span></b></p><p style=\"font-size:16px;\"><b><span style=\"font-size: 18px; line-height: 14px;\">联系在线客服</span></b></p>",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "",
+            "properties": {
+              "coverage_name": "富文本"
+            }
+          },
+          {
+            "id": 170253471188135420,
+            "css": {
+              "top": 255,
+              "left": 19,
+              "color": "#000000",
+              "width": 261,
+              "height": 72,
+              "zIndex": 6,
+              "fontSize": 14,
+              "boxShadow": "none",
+              "textAlign": "left",
+              "lineHeight": 24,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "borderRadius": "",
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)",
+              "backgroundColor": ""
+            },
+            "num": 1,
+            "pid": 4022029389381,
+            "code": "text_single_comp",
+            "mode": "draw",
+            "show": true,
+            "type": "text",
+            "title": "文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "prefix": "",
+                "openPage": true
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "莉维娜世纪公园店\n浦东新区世纪公园2号门\n地铁18号线迎春路站",
+            "display": "",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "properties": {
+              "isFixed": 0,
+              "accredit": false,
+              "showLines": 3,
+              "foldSwitch": false,
+              "coverage_name": "默认文本"
+            }
+          }
+        ],
+        "pageSign": "thin",
+        "properties": {}
+      },
+      {
+        "id": 170253579250801730,
+        "css": {
+          "width": 375,
+          "height": 24,
+          "overflow": "hidden",
+          "boxShadow": "none",
+          "textAlign": "center",
+          "lineHeight": 1,
+          "paddingTop": 0,
+          "borderStyle": "",
+          "borderWidth": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "boxShadowType": "boxShadow",
+          "paddingBottom": 0,
+          "boxShadowAngle": 0,
+          "boxShadowColor": "rgba(0,0,0,1)"
+        },
+        "num": 1,
+        "pid": 4022029389381,
+        "code": "splitline_comp",
+        "show": true,
+        "type": "splitline",
+        "title": "分割线",
+        "active": true,
+        "canUse": true,
+        "events": {
+          "link": {
+            "openPage": true
+          }
+        },
+        "zhanId": 1848617,
+        "display": "",
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [],
+        "pageSign": "thin",
+        "properties": {
+          "color": "#333333",
+          "isFixed": 0,
+          "accredit": false,
+          "lineWidth": 375,
+          "styleType": "solid",
+          "lineHeight": 2
+        }
+      },
+      {
+        "id": 170253579535302430,
+        "css": {
+          "width": 375,
+          "height": 50,
+          "boxShadow": "none",
+          "lineHeight": 1,
+          "paddingTop": 0,
+          "borderStyle": "",
+          "borderWidth": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "boxShadowType": "boxShadow",
+          "paddingBottom": 0,
+          "boxShadowAngle": 0,
+          "boxShadowColor": "rgba(0,0,0,1)"
+        },
+        "num": 1,
+        "pid": 4022029389381,
+        "code": "blank_comp",
+        "show": true,
+        "type": "blank",
+        "title": "留白",
+        "active": true,
+        "canUse": true,
+        "events": {
+          "link": {
+            "openPage": true
+          }
+        },
+        "zhanId": 1848617,
+        "display": "",
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [],
+        "pageSign": "thin",
+        "properties": {
+          "isFixed": 0,
+          "accredit": false
+        }
+      },
+      {
+        "id": 170253580096161820,
+        "css": {
+          "width": 375,
+          "height": 371
+        },
+        "pid": 4022029389381,
+        "code": "draw_comp",
+        "show": true,
+        "type": "draw",
+        "title": "画板1",
+        "canUse": true,
+        "events": {
+          "link": {
+            "prefix": ""
+          }
+        },
+        "isThin": true,
+        "zhanId": 1848617,
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [
+          {
+            "id": 170253580096176500,
+            "css": {
+              "width": 375,
+              "height": 371,
+              "zIndex": 0
+            },
+            "type": "offset",
+            "properties": {
+              "coverage_name": ""
+            }
+          },
+          {
+            "id": 170253580096183900,
+            "css": {
+              "zIndex": 0
+            },
+            "type": 3,
+            "properties": {
+              "type": "",
+              "color": "",
+              "imgSrc": "",
+              "bgColor": "",
+              "bgColorType": "",
+              "coverage_name": ""
+            }
+          },
+          {
+            "id": 170253580096133020,
+            "css": {
+              "top": 0,
+              "left": 0,
+              "width": 375,
+              "height": 248,
+              "zIndex": 2,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderColor": "rgba(0, 0, 0, 1)",
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "borderRadius": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "num": 1,
+            "pid": 4022029389381,
+            "code": "image_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 4,
+            "title": "图片",
+            "active": true,
+            "canUse": true,
+            "events": {
+              "link": {
+                "prefix": "none",
+                "openPage": true
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "//cdn2.weimob.com/saas/saas-fe-sirius-orion-node/production/349/changjingdouditu750_500.png",
+            "properties": {
+              "src": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/sub_1llqakbi1_imgstylebg-1773508474391.jpg",
+              "isFixed": 0,
+              "accredit": false,
+              "imgStyle": {
+                "width": 375,
+                "height": 249,
+                "marginTop": 0,
+                "marginLeft": 0
+              },
+              "defaultSrc": "",
+              "imgStyleBg": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/sub_1llqakbi1_imgstylebg-1773508474391.jpg",
+              "coverage_name": "微信图片_20230711114544"
+            },
+            "showClickEventList": false
+          },
+          {
+            "id": 170253580096191680,
+            "css": {
+              "top": 315,
+              "left": 18,
+              "color": "#000000",
+              "width": 150,
+              "height": 39,
+              "zIndex": 4,
+              "fontSize": 16,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "pid": 4022029389381,
+            "code": "text_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 2,
+            "title": "富文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "url": [
+                  {
+                    "id": 3709698,
+                    "hash": "inKtNKEa9",
+                    "name": "陆家嘴店地图"
+                  }
+                ],
+                "canUse": true,
+                "prefix": "#pages"
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "<p style=\"font-size:16px;\"><span style=\"font-size: 16px; line-height: 14px;\">﻿</span><span style=\"line-height: 14px;\">﻿</span><b><span style=\"font-size: 20px;\"><br></span></b></p><p style=\"font-size:16px;\"><b><span style=\"font-size: 18px; line-height: 14px;\">门店地图</span></b><span style=\"line-height: 14px;\">﻿</span><span style=\"line-height: 21px;\">﻿</span></p>",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "",
+            "properties": {
+              "coverage_name": "富文本"
+            }
+          },
+          {
+            "id": 170253580096115330,
+            "css": {
+              "top": 319,
+              "left": 120,
+              "color": "#000000",
+              "width": 150,
+              "height": 33,
+              "zIndex": 5,
+              "fontSize": 16,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "pid": 4022029389381,
+            "code": "text_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 2,
+            "title": "富文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "canUse": true,
+                "prefix": "service"
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "<p style=\"font-size:16px;\"><span style=\"font-size: 16px;\">﻿</span><b><span style=\"font-size: 18px;\"><br></span></b></p><p style=\"font-size:16px;\"><b><span style=\"font-size: 18px; line-height: 14px;\">联系在线客服</span></b></p>",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "",
+            "properties": {
+              "coverage_name": "富文本"
+            }
+          },
+          {
+            "id": 170253580096100860,
+            "css": {
+              "top": 255,
+              "left": 19,
+              "color": "#000000",
+              "width": 261,
+              "height": 72,
+              "zIndex": 6,
+              "fontSize": 14,
+              "boxShadow": "none",
+              "textAlign": "left",
+              "lineHeight": 24,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "borderRadius": "",
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)",
+              "backgroundColor": ""
+            },
+            "num": 1,
+            "pid": 4022029389381,
+            "code": "text_single_comp",
+            "mode": "draw",
+            "show": true,
+            "type": "text",
+            "title": "文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "prefix": "",
+                "openPage": true
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "莉维娜陆家嘴店\n浦东新区滨江大道5358号\n地铁4号线塘桥",
+            "display": "",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "properties": {
+              "isFixed": 0,
+              "accredit": false,
+              "showLines": 3,
+              "foldSwitch": false,
+              "coverage_name": "默认文本"
+            }
+          }
+        ],
+        "pageSign": "thin",
+        "properties": {}
+      },
+      {
+        "id": 170253580807747740,
+        "css": {
+          "width": 375,
+          "height": 24,
+          "overflow": "hidden",
+          "boxShadow": "none",
+          "textAlign": "center",
+          "lineHeight": 1,
+          "paddingTop": 0,
+          "borderStyle": "",
+          "borderWidth": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "boxShadowType": "boxShadow",
+          "paddingBottom": 0,
+          "boxShadowAngle": 0,
+          "boxShadowColor": "rgba(0,0,0,1)"
+        },
+        "num": 1,
+        "pid": 4022029389381,
+        "code": "splitline_comp",
+        "show": true,
+        "type": "splitline",
+        "title": "分割线",
+        "active": true,
+        "canUse": true,
+        "events": {
+          "link": {
+            "openPage": true
+          }
+        },
+        "zhanId": 1848617,
+        "display": "",
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [],
+        "pageSign": "thin",
+        "properties": {
+          "color": "#333333",
+          "isFixed": 0,
+          "accredit": false,
+          "lineWidth": 375,
+          "styleType": "solid",
+          "lineHeight": 2
+        }
+      },
+      {
+        "id": 170253587534145150,
+        "css": {
+          "width": 375,
+          "height": 50,
+          "boxShadow": "none",
+          "lineHeight": 1,
+          "paddingTop": 0,
+          "borderStyle": "",
+          "borderWidth": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "boxShadowType": "boxShadow",
+          "paddingBottom": 0,
+          "boxShadowAngle": 0,
+          "boxShadowColor": "rgba(0,0,0,1)"
+        },
+        "num": 1,
+        "pid": 4022029389381,
+        "code": "blank_comp",
+        "show": true,
+        "type": "blank",
+        "title": "留白",
+        "active": true,
+        "canUse": true,
+        "events": {
+          "link": {
+            "openPage": true
+          }
+        },
+        "zhanId": 1848617,
+        "display": "",
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [],
+        "pageSign": "thin",
+        "properties": {
+          "isFixed": 0,
+          "accredit": false
+        }
+      },
+      {
+        "id": 170253587936735580,
+        "css": {
+          "width": 375,
+          "height": 371
+        },
+        "pid": 4022029389381,
+        "code": "draw_comp",
+        "show": true,
+        "type": "draw",
+        "title": "画板1",
+        "canUse": true,
+        "events": {
+          "link": {
+            "prefix": ""
+          }
+        },
+        "isThin": true,
+        "zhanId": 1848617,
+        "dorpType": [
+          "thin_page"
+        ],
+        "elements": [
+          {
+            "id": 170253587936743360,
+            "css": {
+              "width": 375,
+              "height": 371,
+              "zIndex": 0
+            },
+            "type": "offset",
+            "properties": {
+              "coverage_name": ""
+            }
+          },
+          {
+            "id": 170253587936733760,
+            "css": {
+              "zIndex": 0
+            },
+            "type": 3,
+            "properties": {
+              "type": "",
+              "color": "",
+              "imgSrc": "",
+              "bgColor": "",
+              "bgColorType": "",
+              "coverage_name": ""
+            }
+          },
+          {
+            "id": 170253587936752420,
+            "css": {
+              "top": 0,
+              "left": 0,
+              "width": 375,
+              "height": 248,
+              "zIndex": 2,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderColor": "rgba(0, 0, 0, 1)",
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "borderRadius": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "num": 1,
+            "pid": 4022029389381,
+            "code": "image_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 4,
+            "title": "图片",
+            "active": true,
+            "canUse": true,
+            "events": {
+              "link": {
+                "prefix": "none",
+                "openPage": true
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "//cdn2.weimob.com/saas/saas-fe-sirius-orion-node/production/349/changjingdouditu750_500.png",
+            "properties": {
+              "src": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/sub_1llqakbi1_imgstylebg-1773508474391.jpg",
+              "isFixed": 0,
+              "accredit": false,
+              "imgStyle": {
+                "width": 494,
+                "height": 248,
+                "marginTop": 0,
+                "marginLeft": -59
+              },
+              "defaultSrc": "",
+              "imgStyleBg": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/sub_1llqakbi1_imgstylebg-1773508474391.jpg",
+              "coverage_name": "微信图片_20230711114544"
+            },
+            "showClickEventList": false
+          },
+          {
+            "id": 170253587936718200,
+            "css": {
+              "top": 315,
+              "left": 18,
+              "color": "#000000",
+              "width": 150,
+              "height": 39,
+              "zIndex": 4,
+              "fontSize": 16,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "pid": 4022029389381,
+            "code": "text_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 2,
+            "title": "富文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "url": [
+                  {
+                    "id": 3709700,
+                    "hash": "dRYU1AS_5",
+                    "name": "歇浦路地图"
+                  }
+                ],
+                "canUse": true,
+                "prefix": "#pages"
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "<p style=\"font-size:16px;\"><span style=\"font-size: 16px; line-height: 14px;\">﻿</span><span style=\"line-height: 14px;\">﻿</span><b><span style=\"font-size: 20px;\"><br></span></b></p><p style=\"font-size:16px;\"><b><span style=\"font-size: 18px; line-height: 14px;\">门店地图</span></b><span style=\"line-height: 14px;\">﻿</span><span style=\"line-height: 21px;\">﻿</span></p>",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "",
+            "properties": {
+              "coverage_name": "富文本"
+            }
+          },
+          {
+            "id": 170253587936742530,
+            "css": {
+              "top": 319,
+              "left": 120,
+              "color": "#000000",
+              "width": 150,
+              "height": 33,
+              "zIndex": 5,
+              "fontSize": 16,
+              "boxShadow": "none",
+              "lineHeight": 1,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)"
+            },
+            "pid": 4022029389381,
+            "code": "text_comp",
+            "mode": "draw",
+            "show": true,
+            "type": 2,
+            "title": "富文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "canUse": true,
+                "prefix": "service"
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "<p style=\"font-size:16px;\"><span style=\"font-size: 16px;\">﻿</span><b><span style=\"font-size: 18px;\"><br></span></b></p><p style=\"font-size:16px;\"><b><span style=\"font-size: 18px; line-height: 14px;\">联系在线客服</span></b></p>",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "defaultUrl": "",
+            "properties": {
+              "coverage_name": "富文本"
+            }
+          },
+          {
+            "id": 170253587936747680,
+            "css": {
+              "top": 255,
+              "left": 19,
+              "color": "#000000",
+              "width": 261,
+              "height": 72,
+              "zIndex": 6,
+              "fontSize": 14,
+              "boxShadow": "none",
+              "textAlign": "left",
+              "lineHeight": 24,
+              "paddingTop": 0,
+              "borderStyle": "",
+              "borderWidth": 0,
+              "paddingLeft": 0,
+              "borderRadius": "",
+              "paddingRight": 0,
+              "boxShadowType": "boxShadow",
+              "paddingBottom": 0,
+              "boxShadowAngle": 0,
+              "boxShadowColor": "rgba(0,0,0,1)",
+              "backgroundColor": ""
+            },
+            "num": 1,
+            "pid": 4022029389381,
+            "code": "text_single_comp",
+            "mode": "draw",
+            "show": true,
+            "type": "text",
+            "title": "文本",
+            "canUse": true,
+            "events": {
+              "link": {
+                "prefix": "",
+                "openPage": true
+              }
+            },
+            "zhanId": 1848617,
+            "animate": {
+              "type": "",
+              "delay": 0,
+              "style": "",
+              "offset": 0,
+              "duration": 2,
+              "iteration": 1
+            },
+            "content": "莉维娜歇浦路店\n浦东新区歇浦路8号\n地铁14号歇浦路站",
+            "display": "",
+            "dorpType": [
+              "thin_page",
+              "draw",
+              "dialog"
+            ],
+            "pageSign": "notThin",
+            "properties": {
+              "isFixed": 0,
+              "accredit": false,
+              "showLines": 3,
+              "foldSwitch": false,
+              "coverage_name": "默认文本"
+            }
+          }
+        ],
+        "pageSign": "thin",
+        "properties": {}
+      }
+    ],
+    "share": {},
+    "tsaOpen": false,
+    "tsa_count": null,
+    "tsaId": null,
+    "isThin": true,
+    "properties": null,
+    "extend": {
+      "header": {
+        "css": {
+          "lineHeight": 1,
+          "borderStyle": "",
+          "borderWidth": 0,
+          "boxShadowAngle": 0
+        },
+        "pid": 4022029389381,
+        "type": "navHeader",
+        "events": {},
+        "zhanId": 1848617,
+        "properties": {
+          "icon": {
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"17px\" height=\"17px\" viewBox=\"0 0 17 17\" version=\"1.1\"><title>返回按钮复制</title><desc>Created with Sketch.</desc><g id=\"v4.18\" stroke=\"none\" stroke-width=\"1\"><g id=\"返回按钮复制\" transform=\"translate(4.000000, 1.000000)\" fill=\"#FFFFFF\" fill-rule=\"nonzero\"><polygon id=\"Path-3\" points=\"9 13.1318908 7.51665835 14.5 0 7.4441762 7.39771875 0.5 8.8810604 1.86810921 2.9408057 7.4441762\" /></g></g></svg>",
+            "items": [
+              {
+                "fill": "#FFFFFF",
+                "svgFill": "#FFFFFF",
+                "elements": [
+                  0
+                ]
+              }
+            ],
+            "svgbg": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB3aWR0aD0iMTdweCIgaGVpZ2h0PSIxN3B4IiB2aWV3Qm94PSIwIDAgMTcgMTciIHZlcnNpb249IjEuMSI+PCEtLSBHZW5lcmF0b3I6IFNrZXRjaCA1NC4xICg3NjQ5MCkgLSBodHRwczovL3NrZXRjaGFwcC5jb20gLS0+PHRpdGxlPui/lOWbnuaMiemSruWkjeWItjwvdGl0bGU+PGRlc2M+Q3JlYXRlZCB3aXRoIFNrZXRjaC48L2Rlc2M+PGcgaWQ9InY0LjE4IiBzdHJva2U9Im5vbmUiIHN0cm9rZS13aWR0aD0iMSI+PGcgaWQ9Iui/lOWbnuaMiemSruWkjeWItiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNC4wMDAwMDAsIDEuMDAwMDAwKSIgZmlsbD0iI0ZGRkZGRiIgZmlsbC1ydWxlPSJub256ZXJvIj48cG9seWdvbiBpZD0iUGF0aC0zIiBwb2ludHM9IjkgMTMuMTMxODkwOCA3LjUxNjY1ODM1IDE0LjUgMCA3LjQ0NDE3NjIgNy4zOTc3MTg3NSAwLjUgOC44ODEwNjA0IDEuODY4MTA5MjEgMi45NDA4MDU3IDcuNDQ0MTc2MiIvPjwvZz48L2c+PC9zdmc+",
+            "events": {
+              "link": {
+                "prefix": "goback",
+                "openPage": true
+              }
+            },
+            "goback": true,
+            "showClickEventList": true
+          },
+          "title": {},
+          "search": {},
+          "miniSrc": "//cdn.weimob.com/saas/zhan/images/4.18/mini-white.png",
+          "navName": "大米兰厅",
+          "navigationStyleType": 5,
+          "navigationBarTextStyle": "white",
+          "navigationBarTitleText": "伊铭萱婚庆",
+          "navigationBarTitleTextType": "2",
+          "navigationBarBackgroundColor": "#000000"
+        }
+      },
+      "pageLiveSessionsIds": [],
+      "pageKnowledgeGoodsIds": []
+    },
+    "useComponents": {},
+    "createdAt": "2023-12-14T03:42:38.608Z",
+    "updatedAt": "2026-01-13T08:01:05.160Z",
+    "deletedAt": null,
+    "counterIds": [],
+    "hasPayInfo": {
+      "hasPay": true,
+      "hasQualification": true
+    },
+    "isExpired": false,
+    "footer": {
+      "type": "1",
+      "weburl": "https://m2.n.weimob.com/wz?channelTag="
+    },
+    "header": {
+      "navigationBarTextStyle": "white",
+      "navigationBarTitleText": "伊铭萱婚庆",
+      "navigationBarTitleTextType": "2",
+      "navigationBarBackgroundColor": "#000000"
+    },
+    "solutionInfo": {
+      "canUseImageCompress": true,
+      "canUseCopyrightLink": true,
+      "weburl": "https://m2.n.weimob.com/wz?channelTag=",
+      "canUseAutoDialog": true,
+      "canUseNavHeader": true,
+      "canBottomCopyRightCtrl": true,
+      "canUseOverseasAddress": true,
+      "canUseInternationalNumber": true,
+      "canUseAnimate": true,
+      "componentConfig": [
+        {
+          "code": "image_comp",
+          "canUse": "true",
+          "isChecked": true,
+          "isNewComp": false,
+          "clickEvent": [
+            {
+              "code": "click_none",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "pages",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "phone",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "address",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "share",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "timeline",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "shareAndTimeline",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "service",
+              "canUse": "1",
+              "isChecked": true,
+              "needAccredit": "1"
+            },
+            {
+              "code": "preview",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "miniprog",
+              "canUse": 1,
+              "isChecked": true
+            },
+            {
+              "code": "weichatFans",
+              "canUse": "1",
+              "isChecked": true
+            },
+            {
+              "code": "cms",
+              "canUse": "1",
+              "isChecked": true
+            },
+            {
+              "code": "businessrelated",
+              "canUse": 1
+            },
+            {
+              "code": "live",
+              "canUse": "1",
+              "isChecked": true,
+              "needAccredit": 1
+            },
+            {
+              "code": "dialog",
+              "canUse": "1",
+              "isChecked": true
+            },
+            {
+              "code": "activity",
+              "canUse": "1",
+              "isChecked": true,
+              "needAccredit": "1"
+            },
+            {
+              "code": "tool",
+              "canUse": "1",
+              "isChecked": true,
+              "needAccredit": "1"
+            },
+            {
+              "code": "mobile",
+              "canUse": "1",
+              "isChecked": true
+            },
+            {
+              "code": "article",
+              "canUse": "1",
+              "isChecked": true
+            },
+            {
+              "code": "knowledge",
+              "canUse": "1",
+              "isChecked": true,
+              "needAccredit": "1"
+            },
+            {
+              "code": "anchor",
+              "canUse": "1",
+              "isChecked": true
+            },
+            {
+              "code": "poster",
+              "canUse": "1",
+              "isChecked": true
+            },
+            {
+              "code": "pay",
+              "canUse": "1",
+              "isChecked": true,
+              "needAccredit": "0"
+            },
+            {
+              "code": "personalCenter",
+              "canUse": 1,
+              "isChecked": true,
+              "needAccredit": "1"
+            },
+            {
+              "code": "exam",
+              "canUse": 1,
+              "isChecked": true,
+              "needAccredit": "1"
+            }
+          ],
+          "isShowInThin": true,
+          "isShowInAppoinment": false,
+          "isShowInChargeAptmt": false,
+          "isShowInContractForm": false
+        }
+      ]
+    },
+    "ad": {
+      "whiteList": [],
+      "isLimitUrl": false
+    },
+    "countDatas": [],
+    "productMap": {},
+    "paymentSwitch": false,
+    "allNavMap": {
+      "3k3hPNEP-": 3807809,
+      "6oyUho_w-": 3807809,
+      "8gxow27V9": 3807809,
+      "FSE5xedRI": 3807809,
+      "vRtjqXHvz": 3807807,
+      "ynk_xR2pA": 3807808
+    },
+    "formCountData": [],
+    "bcClientData": {
+      "checked": 1,
+      "logo": "https://creativepro.oss-cn-shanghai.aliyuncs.com/0305/images/home_logo-1773508463353.png",
+      "title": "微盟提供技术支持",
+      "width": 750,
+      "height": 164
+    }
+  }
+}
