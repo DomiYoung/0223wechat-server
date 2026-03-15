@@ -215,7 +215,112 @@ api3.post('/zhan/xapp/getPageData', async (c) => {
 });
 
 // ========================
-// 5. 其他杂项
+// 5. 表单提交 (Core Lead Submission)
+// ========================
+api3.post('/zhan/xapp/submit', async (c) => {
+    try {
+        const body = await c.req.json().catch(() => ({}));
+        const { phone, submitType, data } = body;
+
+        console.log('[API3] Submit lead:', { phone, submitType, fieldCount: data?.length });
+
+        // === 校验 ===
+        if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
+            return c.json({ errcode: 400, errmsg: '请输入正确的手机号' }, 400);
+        }
+        if (!data || !Array.isArray(data) || data.length === 0) {
+            return c.json({ errcode: 400, errmsg: '提交数据为空' }, 400);
+        }
+
+        // === 1. 写入 lead_submit 主表（每次都新增，保留历史） ===
+        const [submitResult] = await pool.execute(
+            `INSERT INTO lead_submit (phone, submit_type, raw_payload, created_at) VALUES (?, ?, ?, NOW())`,
+            [phone, submitType || 0, JSON.stringify(body)]
+        ) as any;
+        const submitId = submitResult.insertId;
+
+        // === 2. 写入 lead_submit_field 子表 ===
+        for (let i = 0; i < data.length; i++) {
+            const field = data[i];
+            await pool.execute(
+                `INSERT INTO lead_submit_field (submit_id, field_key, label, mark, mode, value_json, show_value, sort_order)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    submitId,
+                    field.fieldKey || '',
+                    field.label || '',
+                    field.mark || '',
+                    field.mode || '',
+                    JSON.stringify(field.value ?? ''),
+                    field.showValue || '',
+                    i,
+                ]
+            );
+        }
+
+        // === 3. 从 data[] 中提取结构化字段 ===
+        const fieldMap = new Map(data.map((f: any) => [f.fieldKey || f.mark, f.value || f.showValue || '']));
+        const name = (fieldMap.get('name') || '') as string;
+        const salutation = (fieldMap.get('salutation') || '') as string;
+        const fullName = salutation ? `${name}${salutation}` : name;
+        const weddingDate = (fieldMap.get('weddingDate') || '') as string;
+        const tables = parseInt(String(fieldMap.get('tables') || '0'), 10) || 0;
+        const store = (fieldMap.get('store') || '') as string;
+        const remark = (fieldMap.get('remark') || '') as string;
+
+        // === 4. Upsert reservation（按手机号去重） ===
+        const [existing] = await pool.execute(
+            'SELECT id, submit_count FROM reservation WHERE mobile = ? LIMIT 1',
+            [phone]
+        ) as any;
+
+        if (existing.length > 0) {
+            // 已存在 → 更新最新信息 + 自增 submit_count
+            const row = existing[0];
+            await pool.execute(
+                `UPDATE reservation SET
+                    name = ?, wedding_date = ?, tables_count = ?,
+                    remark = ?, submit_count = ?, updated_at = NOW()
+                 WHERE id = ?`,
+                [
+                    fullName || row.name,
+                    weddingDate || row.wedding_date,
+                    tables || row.tables_count,
+                    remark || row.remark,
+                    (row.submit_count || 1) + 1,
+                    row.id,
+                ]
+            );
+            console.log(`[API3] Updated reservation #${row.id}, submit_count=${(row.submit_count || 1) + 1}`);
+        } else {
+            // 不存在 → 新建 CRM 线索
+            // 尝试关联门店
+            let venueId: number | null = null;
+            if (store) {
+                const [venues] = await pool.execute(
+                    'SELECT id FROM venue WHERE name LIKE ? AND is_active = 1 LIMIT 1',
+                    [`%${store}%`]
+                ) as any;
+                if (venues.length > 0) venueId = venues[0].id;
+            }
+
+            await pool.execute(
+                `INSERT INTO reservation (name, mobile, wedding_date, tables_count, venue_id, source, status, remark, submit_count, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, '小程序', '待跟进', ?, 1, NOW(), NOW())`,
+                [fullName, phone, weddingDate, tables, venueId, remark]
+            );
+            console.log(`[API3] Created new reservation for ${phone}`);
+        }
+
+        return c.json(ok({ submitId }));
+    } catch (err: any) {
+        console.error('[API3] Submit error:', err);
+        return c.json({ errcode: 500, errmsg: '提交失败，请稍后重试' }, 500);
+    }
+});
+
+// ========================
+// 6. 其他杂项
 // ========================
 api3.post('/user/getPhoneNumber', (c) => c.json(ok({ phoneNumber: '13800138000', countryCode: '86' })));
 

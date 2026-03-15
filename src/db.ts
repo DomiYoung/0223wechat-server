@@ -181,6 +181,9 @@ export async function initDB() {
     try {
         await db.execute(`ALTER TABLE reservation ADD COLUMN lead_meta JSON COMMENT '留资扩展信息' AFTER remark`);
     } catch (_) { /* 列已存在则忽略 */ }
+    try {
+        await db.execute(`ALTER TABLE reservation ADD COLUMN submit_count INT DEFAULT 1 COMMENT '提交次数' AFTER lead_meta`);
+    } catch (_) { /* 列已存在则忽略 */ }
 
     // 8. lead_auth_log — 手机号授权获客日志
     await db.execute(`
