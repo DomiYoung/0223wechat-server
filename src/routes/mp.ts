@@ -6,12 +6,52 @@
  */
 import { Hono } from 'hono';
 import pool from '../db.js';
+import { sendFormSubmitNotification, sendNewLeadNotificationToAdmins } from '../services/wechat.service.js';
+import { notifySalesNewLead } from '../services/sms.service.js';
 
 const mp = new Hono();
 
 // 统一响应格式 (兼容原版 0305)
 const ok = (data: any = {}) => ({ errcode: 0, errmsg: 'success', data });
 const fail = (msg: string, code = 500) => ({ errcode: code, errmsg: msg, data: {} });
+
+// ============================================================
+// categoryKey → categoryId 解析映射器
+// 前端发送 categoryKey (如 'birthday_case', 'business_package')
+// 后端需要将其转换为正确的 category_id
+// ============================================================
+const CATEGORY_KEY_MAP: Record<string, { table: string; slug?: string; name?: string }> = {
+  // 案例分类 (case_category)
+  birthday_case:  { table: 'case_category', name: '生日宴' },
+  business_case:  { table: 'case_category', name: '商务' },
+  wedding_case:   { table: 'case_category', name: '婚礼案例' },
+  // 套餐分类 (package_category)
+  birthday_package: { table: 'package_category', slug: 'birthday' },
+  kids_package:     { table: 'package_category', slug: 'kids' },
+  business_package: { table: 'package_category', slug: 'business' },
+  wedding_menu:     { table: 'package_category', slug: 'wedding_menu' },
+  wedding_pkg:      { table: 'package_category', slug: 'wedding_pkg' },
+};
+
+async function resolveCategoryId(categoryKey: string): Promise<number | null> {
+  const mapping = CATEGORY_KEY_MAP[categoryKey];
+  if (!mapping) return null;
+  
+  let query = '';
+  let param = '';
+  if (mapping.slug) {
+    query = `SELECT id FROM ${mapping.table} WHERE slug = ? AND is_active = 1 LIMIT 1`;
+    param = mapping.slug;
+  } else if (mapping.name) {
+    query = `SELECT id FROM ${mapping.table} WHERE name LIKE ? AND is_active = 1 LIMIT 1`;
+    param = `%${mapping.name}%`;
+  } else {
+    return null;
+  }
+  
+  const [rows] = await pool.execute(query, [param]) as any;
+  return rows.length > 0 ? rows[0].id : null;
+}
 
 // ============================================================
 // 页面配置 (对应原版 POST /api3/zhan/xapp/page)
@@ -72,15 +112,21 @@ mp.post('/categories', async (c) => {
 // ============================================================
 mp.post('/cases', async (c) => {
     try {
-        const { categoryId, pageNum = 1, pageSize = 10 } = await c.req.json();
+        const { categoryId, categoryKey, pageNum = 1, pageSize = 10 } = await c.req.json();
         const offset = (Math.max(1, pageNum) - 1) * Math.min(50, pageSize);
 
         const conditions: string[] = ['wc.is_active = 1'];
         const params: any[] = [];
 
-        if (categoryId) {
+        // 支持 categoryKey (如 'birthday_case') 自动解析为 categoryId
+        let resolvedCategoryId = categoryId;
+        if (!resolvedCategoryId && categoryKey) {
+            resolvedCategoryId = await resolveCategoryId(categoryKey);
+        }
+
+        if (resolvedCategoryId) {
             conditions.push('wc.category_id = ?');
-            params.push(categoryId);
+            params.push(resolvedCategoryId);
         }
 
         const where = conditions.join(' AND ');
@@ -183,15 +229,21 @@ mp.post('/package-categories', async (c) => {
 // ============================================================
 mp.post('/packages', async (c) => {
     try {
-        const { categoryId, slug, pageNum = 1, pageSize = 20 } = await c.req.json();
+        const { categoryId, categoryKey, slug, pageNum = 1, pageSize = 20 } = await c.req.json();
         const offset = (Math.max(1, pageNum) - 1) * Math.min(50, pageSize);
 
         const conditions: string[] = ['p.is_active = 1'];
         const params: any[] = [];
 
-        if (categoryId) {
+        // 支持 categoryKey (如 'business_package') 自动解析为 categoryId
+        let resolvedCategoryId = categoryId;
+        if (!resolvedCategoryId && categoryKey) {
+            resolvedCategoryId = await resolveCategoryId(categoryKey);
+        }
+
+        if (resolvedCategoryId) {
             conditions.push('p.category_id = ?');
-            params.push(categoryId);
+            params.push(resolvedCategoryId);
         } else if (slug) {
             conditions.push('pc.slug = ?');
             params.push(slug);
@@ -498,7 +550,8 @@ mp.post('/submit', async (c) => {
         // 3. 同时写入 reservation (如果包含姓名和手机号)
         const nameField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'name' || f.mark === 'name') : null;
         const phoneField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'phone' || f.mark === 'phone') : null;
-        const dateField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'date' || f.mark === 'date') : null;
+        const dateField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'weddingDate' || f.mark === 'weddingDate') : null;
+        const storeField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'store' || f.mark === 'store') : null;
 
         if (nameField && (phoneField || phone)) {
             const nameVal = nameField.showValue || nameField.value || '';
@@ -510,6 +563,46 @@ mp.post('/submit', async (c) => {
                  VALUES (?, ?, ?, ?, ?)`,
                 [nameVal, phoneVal, dateVal, '小程序-0305', JSON.stringify({ formId, pageId, submitId })]
             );
+        }
+
+        // 4. 发送订阅消息通知
+        const openId = body.openId || '';
+        if (openId && nameField && (phoneField || phone)) {
+            try {
+                await sendFormSubmitNotification(openId, {
+                    name: nameField.showValue || nameField.value || '',
+                    phone: phoneField?.showValue || phoneField?.value || phone || '',
+                    store: storeField?.showValue || storeField?.value || '',
+                    weddingDate: dateField?.showValue || dateField?.value || ''
+                });
+            } catch (notifyErr: any) {
+                // 通知失败不影响主流程，仅记录日志
+                console.error('[Submit] 发送订阅消息失败:', notifyErr.message);
+            }
+        }
+
+        // 5. 发送新留资通知给管理员
+        try {
+            await sendNewLeadNotificationToAdmins({
+                name: nameField?.showValue || nameField?.value || '',
+                phone: phoneField?.showValue || phoneField?.value || phone || '',
+                store: storeField?.showValue || storeField?.value || '',
+                weddingDate: dateField?.showValue || dateField?.value || ''
+            });
+        } catch (adminNotifyErr: any) {
+            console.error('[Submit] 发送管理员通知失败:', adminNotifyErr.message);
+        }
+
+        // 6. 发送短信通知给销售
+        try {
+            await notifySalesNewLead({
+                name: nameField?.showValue || nameField?.value || '',
+                phone: phoneField?.showValue || phoneField?.value || phone || '',
+                store: storeField?.showValue || storeField?.value || '',
+                weddingDate: dateField?.showValue || dateField?.value || ''
+            });
+        } catch (smsErr: any) {
+            console.error('[Submit] 发送短信通知失败:', smsErr.message);
         }
 
         return c.json(ok({ formId: String(submitId) }));
@@ -525,6 +618,44 @@ mp.post('/watermark', async (c) => {
     try {
         return c.json(ok({ imgUrl: '' }));
     } catch (err: any) {
+        return c.json(fail(err.message));
+    }
+});
+
+// ============================================================
+// 订阅消息授权记录
+// ============================================================
+mp.post('/subscribe/report', async (c) => {
+    try {
+        const { templateIds, bizType, openId } = await c.req.json();
+
+        if (!templateIds || !Array.isArray(templateIds) || templateIds.length === 0) {
+            return c.json(fail('模板ID不能为空'));
+        }
+
+        if (!openId) {
+            return c.json(fail('OpenID不能为空'));
+        }
+
+        // 批量插入订阅记录
+        const values = templateIds.map(templateId => [
+            openId,
+            templateId,
+            bizType || 'general',
+            new Date()
+        ]);
+
+        await pool.query(
+            `INSERT INTO user_subscribe (open_id, template_id, biz_type, created_at)
+             VALUES ?
+             ON DUPLICATE KEY UPDATE updated_at = NOW()`,
+            [values]
+        );
+
+        console.log('[Subscribe] 记录用户订阅:', { openId, templateIds, bizType });
+        return c.json(ok({ message: '订阅记录成功' }));
+    } catch (err: any) {
+        console.error('[Subscribe] 记录订阅失败:', err);
         return c.json(fail(err.message));
     }
 });

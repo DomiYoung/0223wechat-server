@@ -1383,6 +1383,7 @@ app.post('/api/upload', authMiddleware, async (c) => {
 // 0305 扩展路由挂载
 // ============================================================
 app.route('/api/mp', mpRoutes);          // 小程序端接口
+app.route('/mp', mpRoutes);              // 小程序端接口 (兼容前端直接调用 /mp/*)
 app.route('/api/admin', admin305Routes); // CMS管理端扩展接口（需认证，复用 authMiddleware）
 app.route('/api3', api3Routes);          // 0305 1:1 模拟接口
 

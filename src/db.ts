@@ -444,6 +444,23 @@ export async function initDB() {
     `);
 
     // ============================================================
+    // 0305 扩展表：用户订阅消息记录
+    // ============================================================
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS user_subscribe (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            open_id VARCHAR(100) NOT NULL COMMENT '用户OpenID',
+            template_id VARCHAR(100) NOT NULL COMMENT '模板ID',
+            biz_type VARCHAR(50) NOT NULL COMMENT '业务类型',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+            UNIQUE KEY uk_openid_template (open_id, template_id),
+            INDEX idx_openid (open_id),
+            INDEX idx_biztype (biz_type)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户订阅消息记录'
+    `);
+
+    // ============================================================
     // 数据迁移：从 venue/reservation 的 city 文本迁移到 city 表
     // ============================================================
     await migrateCityData(db);

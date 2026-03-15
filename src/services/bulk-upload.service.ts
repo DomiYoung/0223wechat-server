@@ -95,17 +95,59 @@ export async function processBulkUpload(zipBuffer: Buffer) {
       if (!imageStructure[venueOrCategory][groupKey]) imageStructure[venueOrCategory][groupKey] = [];
       imageStructure[venueOrCategory][groupKey].push(entry);
     }
+    // 支持分类文件夹: 生日宝宝宴 / 商务宴会 下的子目录作为套餐项
+    else if (!typeFolder || typeFolder) {
+      // For category-based folders (non-venue), store items by sub-folder
+      const itemName = typeFolder || 'default';
+      const groupKey = `CATEGORY_ITEM_${itemName}`;
+      if (!imageStructure[venueOrCategory][groupKey]) imageStructure[venueOrCategory][groupKey] = [];
+      imageStructure[venueOrCategory][groupKey].push(entry);
+    }
   }
+
+  // ============================================================
+  // 分类名 → package_category slug 映射
+  // ============================================================
+  const CATEGORY_SLUG_MAP: Record<string, string> = {
+    '生日宝宝宴': 'birthday',
+    '生日宴': 'birthday',
+    '儿童宴': 'kids',
+    '商务年会': 'business',
+    '商务宴会': 'business',
+    '婚宴菜单': 'wedding_menu',
+    '婚庆套餐': 'wedding_pkg',
+    '宴会套餐': 'wedding_pkg',
+  };
 
   // Process gathered structure
   for (const venueName of Object.keys(imageStructure)) {
     console.log(`[BulkUpload] Processing mapping for: ${venueName}`);
     
-    // Check if it's a structural venue
+    // Check if it's a structural venue (门店)
     const [venueResult] = await pool.query('SELECT id FROM venue WHERE name LIKE ? LIMIT 1', [`%${venueName}%`]) as any;
     const venueId = venueResult.length > 0 ? venueResult[0].id : null;
 
-    if (!venueId && (venueName.includes('旗舰店') || venueName.includes('漕河泾'))) {
+    // Check if it's a category-based folder (分类)
+    const categorySlug = CATEGORY_SLUG_MAP[venueName];
+    let packageCategoryId: number | null = null;
+    if (categorySlug) {
+      const [catResult] = await pool.query('SELECT id FROM package_category WHERE slug = ? LIMIT 1', [categorySlug]) as any;
+      packageCategoryId = catResult.length > 0 ? catResult[0].id : null;
+    }
+
+    // Also handle combined folder names like "生日宝宝宴:商务年会"
+    if (!venueId && !packageCategoryId && venueName.includes(':')) {
+      const subNames = venueName.split(':');
+      for (const subName of subNames) {
+        const subSlug = CATEGORY_SLUG_MAP[subName.trim()];
+        if (subSlug) {
+          console.log(`[BulkUpload] Detected combined category folder, splitting: ${subName.trim()}`);
+          // Mark it for later processing (we process it inline below)
+        }
+      }
+    }
+
+    if (!venueId && !packageCategoryId && (venueName.includes('旗舰店') || venueName.includes('漕河泾'))) {
        report.errors.push(`未能在数据库找到匹配的门店: ${venueName}`);
        continue;
     }
@@ -161,11 +203,43 @@ export async function processBulkUpload(zipBuffer: Buffer) {
              report.errors.push(`未匹配到宴会厅数据库记录: ${venueName} - ${hallName}`);
           }
        }
+       // ============================================================
+       // 分类套餐匹配 (生日宝宝宴 / 商务宴会)
+       // ============================================================
+       else if (groupKey.startsWith('CATEGORY_ITEM_') && packageCategoryId) {
+          const itemName = groupKey.replace('CATEGORY_ITEM_', '');
+          
+          // Try to find an existing package with this name
+          const [pkgResult] = await pool.query(
+             'SELECT id FROM package WHERE category_id = ? AND title LIKE ? LIMIT 1',
+             [packageCategoryId, `%${itemName}%`]
+          ) as any;
+
+          if (pkgResult.length > 0) {
+             const pkgId = pkgResult[0].id;
+             await pool.query('UPDATE package SET cover_url = ? WHERE id = ?', [coverUrl, pkgId]);
+             await pool.query('DELETE FROM package_image WHERE package_id = ?', [pkgId]);
+             for (let i = 0; i < uploadedUrls.length; i++) {
+                await pool.query('INSERT INTO package_image (package_id, image_url, sort_order) VALUES (?, ?, ?)', [pkgId, uploadedUrls[i], i]);
+             }
+             report.packagesUpdated++;
+             console.log(`[BulkUpload] Updated Package: ${venueName} - ${itemName}`);
+          } else {
+             // Auto-create a new package entry under this category
+             const [insertResult] = await pool.query(
+               'INSERT INTO package (category_id, title, cover_url, is_active, sort_order) VALUES (?, ?, ?, 1, 0)',
+               [packageCategoryId, itemName, coverUrl]
+             ) as any;
+             const newPkgId = insertResult.insertId;
+             for (let i = 0; i < uploadedUrls.length; i++) {
+                await pool.query('INSERT INTO package_image (package_id, image_url, sort_order) VALUES (?, ?, ?)', [newPkgId, uploadedUrls[i], i]);
+             }
+             report.packagesUpdated++;
+             console.log(`[BulkUpload] Created & Updated Package: ${venueName} - ${itemName} (new ID: ${newPkgId})`);
+          }
+       }
     }
   }
-
-  // TODO: Add package logic similarly if we have predictable folder names for packages
-  // We will leave packages logic flexible or run it via CMS manually for packages. 
 
   console.log('[BulkUpload] Processing Complete:', report);
   return report;
