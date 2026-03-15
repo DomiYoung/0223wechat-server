@@ -461,6 +461,26 @@ export async function initDB() {
     `);
 
     // ============================================================
+    // 0305 扩展表：短信发送记录
+    // ============================================================
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS sms_log (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            phone VARCHAR(20) NOT NULL COMMENT '接收手机号',
+            template_code VARCHAR(50) NOT NULL COMMENT '短信模板ID',
+            template_param JSON COMMENT '模板参数',
+            biz_id VARCHAR(100) DEFAULT NULL COMMENT '阿里云返回的BizId',
+            status ENUM('success','failed') NOT NULL COMMENT '发送状态',
+            error_message TEXT COMMENT '错误信息',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '发送时间',
+            INDEX idx_phone_created (phone, created_at DESC),
+            INDEX idx_status_created (status, created_at DESC),
+            INDEX idx_template (template_code),
+            INDEX idx_bizid (biz_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='短信发送记录'
+    `);
+
+    // ============================================================
     // 数据迁移：从 venue/reservation 的 city 文本迁移到 city 表
     // ============================================================
     await migrateCityData(db);

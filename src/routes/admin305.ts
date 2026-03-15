@@ -433,7 +433,7 @@ admin305.post('/bulk-upload', async (c) => {
     try {
         const body = await c.req.parseBody();
         const file = body['file'] as File;
-        
+
         if (!file || typeof file === 'string' || typeof file.arrayBuffer !== 'function') {
             return c.json({ error: '请选择.zip压缩包文件' }, 400);
         }
@@ -445,11 +445,187 @@ admin305.post('/bulk-upload', async (c) => {
         const buffer = Buffer.from(await file.arrayBuffer());
         // Do processing
         const report = await processBulkUpload(buffer);
-        
+
         return c.json({ code: 0, data: { report } });
     } catch (err: any) {
         console.error('[Admin305] bulk upload failed:', err);
         return c.json({ error: err.message }, 500);
+    }
+});
+
+// ============================================================
+// 短信发送记录管理
+// ============================================================
+
+/**
+ * 查询短信发送记录列表
+ * GET /api/admin/sms-logs?page=1&limit=20&status=success&phone=139
+ */
+admin305.get('/sms-logs', async (c) => {
+    try {
+        const page = parseInt(c.req.query('page') || '1');
+        const limit = parseInt(c.req.query('limit') || '20');
+        const status = c.req.query('status') || ''; // success/failed/all
+        const phone = c.req.query('phone') || '';
+        const startDate = c.req.query('startDate') || '';
+        const endDate = c.req.query('endDate') || '';
+
+        const offset = (page - 1) * limit;
+
+        // 构建查询条件
+        const conditions: string[] = [];
+        const params: any[] = [];
+
+        if (status && status !== 'all') {
+            conditions.push('status = ?');
+            params.push(status);
+        }
+
+        if (phone) {
+            conditions.push('phone LIKE ?');
+            params.push(`%${phone}%`);
+        }
+
+        if (startDate) {
+            conditions.push('created_at >= ?');
+            params.push(startDate);
+        }
+
+        if (endDate) {
+            conditions.push('created_at <= ?');
+            params.push(`${endDate} 23:59:59`);
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        // 查询总数
+        const [countRows] = await pool.execute(
+            `SELECT COUNT(*) as total FROM sms_log ${whereClause}`,
+            params
+        ) as any;
+
+        const total = countRows[0].total;
+
+        // 查询列表
+        const [rows] = await pool.execute(
+            `SELECT id, phone, template_code, template_param, biz_id, status, error_message, created_at
+             FROM sms_log
+             ${whereClause}
+             ORDER BY created_at DESC
+             LIMIT ? OFFSET ?`,
+            [...params, limit, offset]
+        ) as any;
+
+        return c.json({
+            code: 0,
+            data: {
+                list: rows,
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
+    } catch (err: any) {
+        return c.json({ code: 1, message: err.message }, 500);
+    }
+});
+
+/**
+ * 查询短信发送统计
+ * GET /api/admin/sms-stats?startDate=2026-03-01&endDate=2026-03-15
+ */
+admin305.get('/sms-stats', async (c) => {
+    try {
+        const startDate = c.req.query('startDate') || '';
+        const endDate = c.req.query('endDate') || '';
+
+        const conditions: string[] = [];
+        const params: any[] = [];
+
+        if (startDate) {
+            conditions.push('created_at >= ?');
+            params.push(startDate);
+        }
+
+        if (endDate) {
+            conditions.push('created_at <= ?');
+            params.push(`${endDate} 23:59:59`);
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        // 统计总数、成功数、失败数
+        const [statsRows] = await pool.execute(
+            `SELECT
+               COUNT(*) as total,
+               SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+               SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count
+             FROM sms_log
+             ${whereClause}`,
+            params
+        ) as any;
+
+        // 按模板统计
+        const [templateRows] = await pool.execute(
+            `SELECT
+               template_code,
+               COUNT(*) as count,
+               SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count
+             FROM sms_log
+             ${whereClause}
+             GROUP BY template_code
+             ORDER BY count DESC`,
+            params
+        ) as any;
+
+        // 按日期统计（最近7天）
+        const [dailyRows] = await pool.execute(
+            `SELECT
+               DATE(created_at) as date,
+               COUNT(*) as count,
+               SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count
+             FROM sms_log
+             ${whereClause}
+             GROUP BY DATE(created_at)
+             ORDER BY date DESC
+             LIMIT 7`,
+            params
+        ) as any;
+
+        return c.json({
+            code: 0,
+            data: {
+                summary: statsRows[0],
+                byTemplate: templateRows,
+                byDate: dailyRows
+            }
+        });
+    } catch (err: any) {
+        return c.json({ code: 1, message: err.message }, 500);
+    }
+});
+
+/**
+ * 查询单条短信详情
+ * GET /api/admin/sms-logs/:id
+ */
+admin305.get('/sms-logs/:id', async (c) => {
+    try {
+        const id = c.req.param('id');
+
+        const [rows] = await pool.execute(
+            'SELECT * FROM sms_log WHERE id = ?',
+            [id]
+        ) as any;
+
+        if (rows.length === 0) {
+            return c.json({ code: 404, message: '记录不存在' }, 404);
+        }
+
+        return c.json({ code: 0, data: rows[0] });
+    } catch (err: any) {
+        return c.json({ code: 1, message: err.message }, 500);
     }
 });
 
