@@ -5,20 +5,20 @@
  * 安装依赖：
  * npm install @alicloud/dysmsapi20170525 @alicloud/openapi-client
  */
-import Dysmsapi20170525, * as $Dysmsapi20170525 from '@alicloud/dysmsapi20170525';
-import * as $OpenApi from '@alicloud/openapi-client';
+import Dysmsapi20170525 from '@alicloud/dysmsapi20170525';
+import OpenApi from '@alicloud/openapi-client';
 
 /**
  * 初始化短信客户端
  */
-function createSmsClient(): Dysmsapi20170525 {
-  const config = new $OpenApi.Config({
+function createSmsClient() {
+  const config = new OpenApi.Config({
     // 复用 OSS 的 AccessKey
     accessKeyId: process.env.ALIYUN_OSS_ACCESS_KEY_ID,
     accessKeySecret: process.env.ALIYUN_OSS_ACCESS_KEY_SECRET,
     endpoint: 'dysmsapi.aliyuncs.com'
   });
-  return new Dysmsapi20170525(config);
+  return new Dysmsapi20170525.default(config);
 }
 
 /**
@@ -32,7 +32,7 @@ async function sendSMS(
   const client = createSmsClient();
 
   try {
-    const request = new $Dysmsapi20170525.SendSmsRequest({
+    const request = new Dysmsapi20170525.SendSmsRequest({
       phoneNumbers: phoneNumbers,
       signName: process.env.SMS_SIGN_NAME || '嘉美麓德', // 短信签名
       templateCode: templateCode,
@@ -40,6 +40,10 @@ async function sendSMS(
     });
 
     const response = await client.sendSms(request);
+
+    if (!response.body) {
+      throw new Error('短信服务返回空响应');
+    }
 
     if (response.body.code === 'OK') {
       console.log('[SMS] 短信发送成功:', {

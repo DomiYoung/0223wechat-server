@@ -49,7 +49,7 @@ async function getAccessToken(): Promise<string> {
       // 默认有效期7200秒（2小时）
       tokenExpireTime = now + (response.data.expires_in || 7200) * 1000;
       console.log('[Wechat] Access Token 获取成功');
-      return cachedAccessToken;
+      return cachedAccessToken as string;
     }
 
     throw new Error(`获取 Access Token 失败: ${JSON.stringify(response.data)}`);
