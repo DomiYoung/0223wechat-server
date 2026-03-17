@@ -6,8 +6,11 @@ on:
       - main
     paths:
       - 'src/**'
+      - 'scripts/**'
       - 'package.json'
+      - 'package-lock.json'
       - 'bun.lockb'
+      - 'tsconfig.json'
       - 'deploy.sh'
       - '.github/workflows/deploy.yml'
 
@@ -37,14 +40,34 @@ jobs:
           SERVER_PASS: ${{ secrets.SERVER_PASS }}
           DEST_PATH: /www/wwwroot/0223wechat-server
         run: |
-          # Setup SSHpass
+          # 安装 sshpass 和 rsync
           sudo apt-get update && sudo apt-get install -y sshpass rsync
 
-          echo "🚀 Syncing files..."
+          echo "🚀 同步核心文件..."
+          # 配置文件
           sshpass -p "$SERVER_PASS" rsync -rz --progress -e "ssh -o StrictHostKeyChecking=no" package.json $SERVER_USER@$SERVER_IP:$DEST_PATH/
+          sshpass -p "$SERVER_PASS" rsync -rz --progress -e "ssh -o StrictHostKeyChecking=no" package-lock.json $SERVER_USER@$SERVER_IP:$DEST_PATH/
+          sshpass -p "$SERVER_PASS" rsync -rz --progress -e "ssh -o StrictHostKeyChecking=no" tsconfig.json $SERVER_USER@$SERVER_IP:$DEST_PATH/
+
+          # 编译产物
           sshpass -p "$SERVER_PASS" rsync -rz --progress --delete -e "ssh -o StrictHostKeyChecking=no" dist/ $SERVER_USER@$SERVER_IP:$DEST_PATH/dist/
+
+          # API 数据
           sshpass -p "$SERVER_PASS" rsync -rz --progress --delete -e "ssh -o StrictHostKeyChecking=no" api_dump/ $SERVER_USER@$SERVER_IP:$DEST_PATH/api_dump/
 
-          echo "🚀 Restarting PM2 service..."
+          # TypeScript 源码（迁移脚本依赖 src/ 中的 db 模块）
+          sshpass -p "$SERVER_PASS" rsync -rz --progress --delete -e "ssh -o StrictHostKeyChecking=no" src/ $SERVER_USER@$SERVER_IP:$DEST_PATH/src/
+
+          # 数据库迁移脚本
+          sshpass -p "$SERVER_PASS" rsync -rz --progress --delete -e "ssh -o StrictHostKeyChecking=no" scripts/ $SERVER_USER@$SERVER_IP:$DEST_PATH/scripts/
+
+          echo "📦 服务器端安装依赖..."
+          sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "cd $DEST_PATH && npm install 2>&1 | tail -10"
+
+          echo "🗄️ 执行数据库迁移脚本..."
+          sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "cd $DEST_PATH && npx tsx scripts/db_migrate_core_constraints.ts 2>&1"
+          sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "cd $DEST_PATH && npx tsx scripts/db_migrate_reservation_unique.ts 2>&1"
+
+          echo "🚀 重启 PM2 服务..."
           sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "cd $DEST_PATH && pm2 restart wechat-server"
-          echo "✅ Deployment Successful!"
+          echo "✅ 部署完成！"
