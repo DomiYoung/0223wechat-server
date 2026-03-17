@@ -9,9 +9,9 @@ on:
       - 'scripts/**'
       - 'package.json'
       - 'package-lock.json'
-      - 'bun.lockb'
+      - 'bun.lock'
       - 'tsconfig.json'
-      - 'deploy.sh'
+      - 'ecosystem.config.cjs'
       - '.github/workflows/deploy.yml'
 
 jobs:
@@ -40,34 +40,48 @@ jobs:
           SERVER_PASS: ${{ secrets.SERVER_PASS }}
           DEST_PATH: /www/wwwroot/0223wechat-server
         run: |
-          # 安装 sshpass 和 rsync
-          sudo apt-get update && sudo apt-get install -y sshpass rsync
+          # 安装 sshpass 和 rsync（使用缓存加速）
+          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass rsync > /dev/null
 
+          SSH_CMD="sshpass -p $SERVER_PASS ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP"
+          RSYNC_CMD="sshpass -p $SERVER_PASS rsync -rz --progress -e 'ssh -o StrictHostKeyChecking=no'"
+
+          # 1. 备份当前 dist（回滚用）
+          echo "📦 备份当前版本..."
+          $SSH_CMD "cd $DEST_PATH && rm -rf dist.bak && cp -r dist dist.bak 2>/dev/null || true"
+
+          # 2. 同步文件
           echo "🚀 同步核心文件..."
-          # 配置文件
-          sshpass -p "$SERVER_PASS" rsync -rz --progress -e "ssh -o StrictHostKeyChecking=no" package.json $SERVER_USER@$SERVER_IP:$DEST_PATH/
-          sshpass -p "$SERVER_PASS" rsync -rz --progress -e "ssh -o StrictHostKeyChecking=no" package-lock.json $SERVER_USER@$SERVER_IP:$DEST_PATH/
-          sshpass -p "$SERVER_PASS" rsync -rz --progress -e "ssh -o StrictHostKeyChecking=no" tsconfig.json $SERVER_USER@$SERVER_IP:$DEST_PATH/
+          sshpass -p "$SERVER_PASS" rsync -rz -e "ssh -o StrictHostKeyChecking=no" package.json package-lock.json tsconfig.json ecosystem.config.cjs $SERVER_USER@$SERVER_IP:$DEST_PATH/
+          sshpass -p "$SERVER_PASS" rsync -rz --delete -e "ssh -o StrictHostKeyChecking=no" dist/ $SERVER_USER@$SERVER_IP:$DEST_PATH/dist/
+          sshpass -p "$SERVER_PASS" rsync -rz --delete -e "ssh -o StrictHostKeyChecking=no" src/ $SERVER_USER@$SERVER_IP:$DEST_PATH/src/
+          sshpass -p "$SERVER_PASS" rsync -rz --delete -e "ssh -o StrictHostKeyChecking=no" scripts/ $SERVER_USER@$SERVER_IP:$DEST_PATH/scripts/
 
-          # 编译产物
-          sshpass -p "$SERVER_PASS" rsync -rz --progress --delete -e "ssh -o StrictHostKeyChecking=no" dist/ $SERVER_USER@$SERVER_IP:$DEST_PATH/dist/
+          # 3. 安装依赖
+          echo "📦 安装依赖..."
+          $SSH_CMD "cd $DEST_PATH && npm install --production 2>&1 | tail -5"
 
-          # API 数据
-          sshpass -p "$SERVER_PASS" rsync -rz --progress --delete -e "ssh -o StrictHostKeyChecking=no" api_dump/ $SERVER_USER@$SERVER_IP:$DEST_PATH/api_dump/
+          # 4. 数据库迁移
+          echo "🗄️ 执行数据库迁移..."
+          $SSH_CMD "cd $DEST_PATH && npx tsx scripts/db_migrate_core_constraints.ts 2>&1"
+          $SSH_CMD "cd $DEST_PATH && npx tsx scripts/db_migrate_reservation_unique.ts 2>&1"
 
-          # TypeScript 源码（迁移脚本依赖 src/ 中的 db 模块）
-          sshpass -p "$SERVER_PASS" rsync -rz --progress --delete -e "ssh -o StrictHostKeyChecking=no" src/ $SERVER_USER@$SERVER_IP:$DEST_PATH/src/
+          # 5. 重启服务
+          echo "🚀 重启服务..."
+          $SSH_CMD "cd $DEST_PATH && pm2 startOrRestart ecosystem.config.cjs --env production"
 
-          # 数据库迁移脚本
-          sshpass -p "$SERVER_PASS" rsync -rz --progress --delete -e "ssh -o StrictHostKeyChecking=no" scripts/ $SERVER_USER@$SERVER_IP:$DEST_PATH/scripts/
+          # 6. 健康检查（等待 5 秒后验证）
+          echo "🏥 健康检查..."
+          sleep 5
+          HEALTH_STATUS=$($SSH_CMD "curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8199/mp/venues -H 'Content-Type: application/json' -d '{}' --connect-timeout 10")
+          if [ "$HEALTH_STATUS" = "200" ]; then
+            echo "✅ 部署成功！健康检查通过 (HTTP $HEALTH_STATUS)"
+          else
+            echo "❌ 健康检查失败 (HTTP $HEALTH_STATUS)，回滚..."
+            $SSH_CMD "cd $DEST_PATH && rm -rf dist && mv dist.bak dist && pm2 restart wechat-server"
+            exit 1
+          fi
 
-          echo "📦 服务器端安装依赖..."
-          sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "cd $DEST_PATH && npm install 2>&1 | tail -10"
-
-          echo "🗄️ 执行数据库迁移脚本..."
-          sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "cd $DEST_PATH && npx tsx scripts/db_migrate_core_constraints.ts 2>&1"
-          sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "cd $DEST_PATH && npx tsx scripts/db_migrate_reservation_unique.ts 2>&1"
-
-          echo "🚀 重启 PM2 服务..."
-          sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "cd $DEST_PATH && pm2 restart wechat-server"
-          echo "✅ 部署完成！"
+          # 7. 清理备份
+          $SSH_CMD "cd $DEST_PATH && rm -rf dist.bak"
+          echo "🎉 部署完成！"
