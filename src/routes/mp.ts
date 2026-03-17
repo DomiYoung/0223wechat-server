@@ -627,9 +627,6 @@ mp.post('/submit', async (c) => {
                     `INSERT INTO reservation (name, mobile, wedding_date, source, lead_meta, submit_count)
                      VALUES (?, ?, ?, ?, ?, 1)
                      ON DUPLICATE KEY UPDATE
-                        name = VALUES(name),
-                        wedding_date = VALUES(wedding_date),
-                        source = VALUES(source),
                         lead_meta = VALUES(lead_meta),
                         submit_count = COALESCE(submit_count, 1) + 1,
                         updated_at = NOW()`,

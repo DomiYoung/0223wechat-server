@@ -297,11 +297,6 @@ api3.post('/zhan/xapp/submit', async (c) => {
                 `INSERT INTO reservation (name, mobile, wedding_date, tables_count, venue_id, source, status, remark, submit_count, created_at, updated_at)
                  VALUES (?, ?, ?, ?, ?, '小程序', '待跟进', ?, 1, NOW(), NOW())
                  ON DUPLICATE KEY UPDATE
-                    name = VALUES(name),
-                    wedding_date = VALUES(wedding_date),
-                    tables_count = VALUES(tables_count),
-                    venue_id = VALUES(venue_id),
-                    source = VALUES(source),
                     submit_count = COALESCE(submit_count, 1) + 1,
                     updated_at = NOW()`,
                 [fullName, phone, weddingDate, tables, venueId, remark]

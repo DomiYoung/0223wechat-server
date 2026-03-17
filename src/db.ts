@@ -547,8 +547,11 @@ export async function initDB() {
     // 案例分类种子数据
     const [caseCatRows] = await db.execute('SELECT COUNT(*) as count FROM case_category') as any;
     if (caseCatRows[0].count === 0) {
-        await db.execute("INSERT INTO case_category (name, sort_order) VALUES ('婚礼案例', 1), ('婚礼攻略', 2)");
-        console.log('📂 案例分类已创建: 婚礼案例 / 婚礼攻略');
+        await db.execute("INSERT INTO case_category (name, sort_order) VALUES ('婚礼案例', 1), ('婚礼攻略', 2), ('生日宴', 3), ('商务', 4)");
+        console.log('📂 案例分类已创建: 婚礼案例 / 婚礼攻略 / 生日宴 / 商务');
+    } else {
+        // 兼容已有数据的生产库：确保"生日宴"和"商务"分类存在
+        await db.execute("INSERT IGNORE INTO case_category (name, sort_order) VALUES ('生日宴', 3), ('商务', 4)");
     }
 
     // 套餐分类种子数据
