@@ -8,33 +8,13 @@ import { Hono } from 'hono';
 import pool from '../db.js';
 import { sendFormSubmitNotification, sendNewLeadNotificationToAdmins } from '../services/wechat.service.js';
 import { notifySalesNewLead } from '../services/sms.service.js';
+import { remember } from '../response-cache.js';
 
 const mp = new Hono();
 
 // 统一响应格式 (兼容原版 0305)
 const ok = (data: any = {}) => ({ errcode: 0, errmsg: 'success', data });
 const fail = (msg: string, code = 500) => ({ errcode: code, errmsg: msg, data: {} });
-
-async function insertLeadSubmitFields(submitId: number, fields: any[]) {
-  if (!Array.isArray(fields) || fields.length === 0) return;
-
-  const values = fields.map((item: any, index: number) => [
-    submitId,
-    item.fieldKey || item.name || '',
-    item.label || '',
-    item.mark || '',
-    String(item.mode || ''),
-    item.value !== undefined ? JSON.stringify(item.value) : null,
-    item.showValue || (typeof item.value === 'string' ? item.value : ''),
-    index,
-  ]);
-
-  await pool.query(
-    `INSERT INTO lead_submit_field (submit_id, field_key, label, mark, mode, value_json, show_value, sort_order)
-     VALUES ?`,
-    [values]
-  );
-}
 
 // ============================================================
 // categoryKey → categoryId 解析映射器
@@ -94,19 +74,21 @@ mp.post('/page', async (c) => {
         const { pageKey, hash } = await c.req.json();
         const key = pageKey || hash || 'home';
 
-        const [rows] = await pool.execute(
-            'SELECT page_key, title, bg_color, elements_json, bottom_nav_json, music_url FROM page_config WHERE page_key = ? AND is_active = 1',
-            [key]
-        ) as any;
+        const row = await remember(`page:v1:${key}`, 60_000, async () => {
+            const [rows] = await pool.execute(
+                'SELECT page_key, title, bg_color, elements_json, bottom_nav_json, music_url FROM page_config WHERE page_key = ? AND is_active = 1',
+                [key]
+            ) as any;
+            return rows[0] || null;
+        });
 
-        if (rows.length === 0) {
+        if (!row) {
             return c.json(ok({
                 hash: key, pageId: key, title: '', backgroundColor: '#ffffff',
                 elements: [], bottomNav: { show: false, data: {} }
             }));
         }
 
-        const row = rows[0];
         return c.json(ok({
             hash: row.page_key,
             pageId: row.page_key,
@@ -126,21 +108,24 @@ mp.post('/page', async (c) => {
 // ============================================================
 mp.post('/categories', async (c) => {
     try {
-        const [categories] = await pool.execute(
-            `SELECT
-                cc.id,
-                cc.name,
-                COALESCE(cnt.total, 0) AS count
-             FROM case_category cc
-             LEFT JOIN (
-                SELECT category_id, COUNT(*) AS total
-                FROM wedding_case
-                WHERE is_active = 1 AND category_id IS NOT NULL
-                GROUP BY category_id
-             ) cnt ON cnt.category_id = cc.id
-             WHERE cc.is_active = 1
-             ORDER BY cc.sort_order, cc.id`
-        ) as any;
+        const categories = await remember('categories:v1', 5 * 60_000, async () => {
+            const [rows] = await pool.execute(
+                `SELECT
+                    cc.id,
+                    cc.name,
+                    COALESCE(cnt.total, 0) AS count
+                 FROM case_category cc
+                 LEFT JOIN (
+                    SELECT category_id, COUNT(*) AS total
+                    FROM wedding_case
+                    WHERE is_active = 1 AND category_id IS NOT NULL
+                    GROUP BY category_id
+                 ) cnt ON cnt.category_id = cc.id
+                 WHERE cc.is_active = 1
+                 ORDER BY cc.sort_order, cc.id`
+            ) as any;
+            return rows;
+        });
 
         return c.json(ok({ categories }));
     } catch (err: any) {
@@ -253,12 +238,15 @@ mp.post('/case/like', async (c) => {
 // ============================================================
 mp.post('/package-categories', async (c) => {
     try {
-        const [categories] = await pool.execute(
-            `SELECT id, name, slug, cover_url AS coverUrl
-             FROM package_category
-             WHERE is_active = 1
-             ORDER BY sort_order, id`
-        ) as any;
+        const categories = await remember('package_categories:v1', 5 * 60_000, async () => {
+            const [rows] = await pool.execute(
+                `SELECT id, name, slug, cover_url AS coverUrl
+                 FROM package_category
+                 WHERE is_active = 1
+                 ORDER BY sort_order, id`
+            ) as any;
+            return rows;
+        });
         return c.json(ok({ categories }));
     } catch (err: any) {
         return c.json(fail(err.message));
@@ -367,37 +355,41 @@ mp.post('/venues', async (c) => {
 
         const where = conditions.join(' AND ');
 
-        const [list] = await pool.execute(
-            `SELECT v.id, v.name, COALESCE(ct.name, v.city) AS city,
-                    v.address, v.phone, v.cover_url AS coverUrl,
-                    v.business_hours AS businessHours, v.lat, v.lng,
-                    v.metro_info AS metroInfo, v.description,
-                    b.name AS brandName
-             FROM venue v
-             LEFT JOIN city ct ON v.city_id = ct.id
-             LEFT JOIN brand b ON v.brand_id = b.id
-             WHERE ${where}
-             ORDER BY v.brand_id, v.id`,
-            params
-        ) as any;
-
-        // 批量查询所有门店的轮播图（避免 N+1）
-        const venueIds = list.map((v: any) => v.id);
-        if (venueIds.length > 0) {
-            const placeholders = venueIds.map(() => '?').join(',');
-            const [allImgs] = await pool.execute(
-                `SELECT venue_id, image_url FROM venue_image WHERE venue_id IN (${placeholders}) ORDER BY sort_order`,
-                venueIds
+        const list = await remember(`venues:v1:${cityId || ''}:${brandId || ''}`, 60_000, async () => {
+            const [rows] = await pool.execute(
+                `SELECT v.id, v.name, COALESCE(ct.name, v.city) AS city,
+                        v.address, v.phone, v.cover_url AS coverUrl,
+                        v.business_hours AS businessHours, v.lat, v.lng,
+                        v.metro_info AS metroInfo, v.description,
+                        b.name AS brandName
+                 FROM venue v
+                 LEFT JOIN city ct ON v.city_id = ct.id
+                 LEFT JOIN brand b ON v.brand_id = b.id
+                 WHERE ${where}
+                 ORDER BY v.brand_id, v.id`,
+                params
             ) as any;
-            const imgMap = new Map<number, string[]>();
-            for (const img of allImgs) {
-                if (!imgMap.has(img.venue_id)) imgMap.set(img.venue_id, []);
-                imgMap.get(img.venue_id)!.push(img.image_url);
+
+            // 批量查询所有门店的轮播图（避免 N+1）
+            const venueIds = rows.map((v: any) => v.id);
+            if (venueIds.length > 0) {
+                const placeholders = venueIds.map(() => '?').join(',');
+                const [allImgs] = await pool.execute(
+                    `SELECT venue_id, image_url FROM venue_image WHERE venue_id IN (${placeholders}) ORDER BY sort_order`,
+                    venueIds
+                ) as any;
+                const imgMap = new Map<number, string[]>();
+                for (const img of allImgs) {
+                    if (!imgMap.has(img.venue_id)) imgMap.set(img.venue_id, []);
+                    imgMap.get(img.venue_id)!.push(img.image_url);
+                }
+                for (const venue of rows) {
+                    venue.images = imgMap.get(venue.id) || [];
+                }
             }
-            for (const venue of list) {
-                venue.images = imgMap.get(venue.id) || [];
-            }
-        }
+
+            return rows;
+        });
 
         return c.json(ok({ list }));
     } catch (err: any) {
@@ -538,11 +530,14 @@ mp.post('/hall/detail', async (c) => {
 // ============================================================
 mp.post('/brand', async (c) => {
     try {
-        const [rows] = await pool.execute(
-            'SELECT id, name, logo_url AS logoUrl, slogan, description, contact_phone AS contactPhone, contact_wechat AS contactWechat FROM brand WHERE is_active = 1 LIMIT 1'
-        ) as any;
+        const brand = await remember('brand:v1', 5 * 60_000, async () => {
+            const [rows] = await pool.execute(
+                'SELECT id, name, logo_url AS logoUrl, slogan, description, contact_phone AS contactPhone, contact_wechat AS contactWechat FROM brand WHERE is_active = 1 LIMIT 1'
+            ) as any;
+            return rows[0] || null;
+        });
 
-        return c.json(ok(rows[0] || {}));
+        return c.json(ok(brand || {}));
     } catch (err: any) {
         return c.json(fail(err.message));
     }
@@ -553,9 +548,12 @@ mp.post('/brand', async (c) => {
 // ============================================================
 mp.post('/cities', async (c) => {
     try {
-        const [list] = await pool.execute(
-            'SELECT id, name FROM city WHERE is_active = 1 ORDER BY sort_order, id'
-        ) as any;
+        const list = await remember('cities:v1', 5 * 60_000, async () => {
+            const [rows] = await pool.execute(
+                'SELECT id, name FROM city WHERE is_active = 1 ORDER BY sort_order, id'
+            ) as any;
+            return rows;
+        });
         return c.json(ok({ list }));
     } catch (err: any) {
         return c.json(fail(err.message));
@@ -571,53 +569,90 @@ mp.post('/submit', async (c) => {
         const body = await c.req.json();
         const { formId, pageId, phone, data: fields } = body;
 
-        // 1. 写入 lead_submit 主表
-        const [submitResult] = await pool.execute(
-            `INSERT INTO lead_submit (
-                pid, zhan_id, wid, uwid, open_id, form_id, page_id,
-                submit_type, channel_id, phone, raw_payload
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                body.pid || '', body.zhanId || '', body.wid || '', body.uwid || '',
-                body.openId || '', formId || '', pageId || '',
-                Number(body.submitType || 0), Number(body.channelId || 0),
-                phone || '',
-                JSON.stringify(body)
-            ]
-        ) as any;
-
-        const submitId = submitResult.insertId;
-
-        // 2. 写入 lead_submit_field 子表
-        await insertLeadSubmitFields(submitId, fields);
-
-        // 3. 同时写入 reservation (如果包含姓名和手机号)
         const nameField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'name' || f.mark === 'name') : null;
         const phoneField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'phone' || f.mark === 'phone') : null;
         const dateField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'weddingDate' || f.mark === 'weddingDate') : null;
         const storeField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'store' || f.mark === 'store') : null;
+        const nameVal = nameField?.showValue || nameField?.value || '';
+        const phoneVal = phoneField?.showValue || phoneField?.value || phone || '';
+        const dateVal = dateField?.showValue || dateField?.value || '';
+        const openId = body.openId || '';
+        const conn = await pool.getConnection();
+        let submitId = 0;
 
-        if (nameField && (phoneField || phone)) {
-            const nameVal = nameField.showValue || nameField.value || '';
-            const phoneVal = phoneField?.showValue || phoneField?.value || phone || '';
-            const dateVal = dateField?.showValue || dateField?.value || '';
+        try {
+            await conn.beginTransaction();
 
-            await pool.execute(
-                `INSERT INTO reservation (name, mobile, wedding_date, source, lead_meta)
-                 VALUES (?, ?, ?, ?, ?)`,
-                [nameVal, phoneVal, dateVal, '小程序-0305', JSON.stringify({ formId, pageId, submitId })]
-            );
+            // 1. 写入 lead_submit 主表
+            const [submitResult] = await conn.execute(
+                `INSERT INTO lead_submit (
+                    pid, zhan_id, wid, uwid, open_id, form_id, page_id,
+                    submit_type, channel_id, phone, raw_payload
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    body.pid || '', body.zhanId || '', body.wid || '', body.uwid || '',
+                    openId || '', formId || '', pageId || '',
+                    Number(body.submitType || 0), Number(body.channelId || 0),
+                    phoneVal || '',
+                    JSON.stringify(body)
+                ]
+            ) as any;
+
+            submitId = submitResult.insertId;
+
+            // 2. 写入 lead_submit_field 子表（批量）
+            if (Array.isArray(fields) && fields.length > 0) {
+                const values = fields.map((item: any, index: number) => [
+                    submitId,
+                    item.fieldKey || item.name || '',
+                    item.label || '',
+                    item.mark || '',
+                    String(item.mode || ''),
+                    item.value !== undefined ? JSON.stringify(item.value) : null,
+                    item.showValue || (typeof item.value === 'string' ? item.value : ''),
+                    index,
+                ]);
+
+                await conn.query(
+                    `INSERT INTO lead_submit_field (submit_id, field_key, label, mark, mode, value_json, show_value, sort_order)
+                     VALUES ?`,
+                    [values]
+                );
+            }
+
+            // 3. CRM 聚合表按手机号原子 upsert，配合唯一索引避免并发首次提交重复插入
+            if (nameVal && phoneVal) {
+                const leadMeta = JSON.stringify({ formId, pageId, submitId });
+                await conn.execute(
+                    `INSERT INTO reservation (name, mobile, wedding_date, source, lead_meta, submit_count)
+                     VALUES (?, ?, ?, ?, ?, 1)
+                     ON DUPLICATE KEY UPDATE
+                        name = VALUES(name),
+                        wedding_date = VALUES(wedding_date),
+                        source = VALUES(source),
+                        lead_meta = VALUES(lead_meta),
+                        submit_count = COALESCE(submit_count, 1) + 1,
+                        updated_at = NOW()`,
+                    [nameVal, phoneVal, dateVal, '小程序-0305', leadMeta]
+                );
+            }
+
+            await conn.commit();
+        } catch (e) {
+            try { await conn.rollback(); } catch (_) {}
+            throw e;
+        } finally {
+            conn.release();
         }
 
         // 4. 发送订阅消息通知
-        const openId = body.openId || '';
-        if (openId && nameField && (phoneField || phone)) {
+        if (openId && nameVal && phoneVal) {
             try {
                 await sendFormSubmitNotification(openId, {
-                    name: nameField.showValue || nameField.value || '',
-                    phone: phoneField?.showValue || phoneField?.value || phone || '',
+                    name: nameVal,
+                    phone: phoneVal,
                     store: storeField?.showValue || storeField?.value || '',
-                    weddingDate: dateField?.showValue || dateField?.value || ''
+                    weddingDate: dateVal
                 });
             } catch (notifyErr: any) {
                 // 通知失败不影响主流程，仅记录日志
@@ -628,10 +663,10 @@ mp.post('/submit', async (c) => {
         // 5. 发送新留资通知给管理员
         try {
             await sendNewLeadNotificationToAdmins({
-                name: nameField?.showValue || nameField?.value || '',
-                phone: phoneField?.showValue || phoneField?.value || phone || '',
+                name: nameVal,
+                phone: phoneVal,
                 store: storeField?.showValue || storeField?.value || '',
-                weddingDate: dateField?.showValue || dateField?.value || ''
+                weddingDate: dateVal
             });
         } catch (adminNotifyErr: any) {
             console.error('[Submit] 发送管理员通知失败:', adminNotifyErr.message);
@@ -640,10 +675,10 @@ mp.post('/submit', async (c) => {
         // 6. 发送短信通知给销售
         try {
             await notifySalesNewLead({
-                name: nameField?.showValue || nameField?.value || '',
-                phone: phoneField?.showValue || phoneField?.value || phone || '',
+                name: nameVal,
+                phone: phoneVal,
                 store: storeField?.showValue || storeField?.value || '',
-                weddingDate: dateField?.showValue || dateField?.value || ''
+                weddingDate: dateVal
             });
         } catch (smsErr: any) {
             console.error('[Submit] 发送短信通知失败:', smsErr.message);
@@ -692,7 +727,9 @@ mp.post('/subscribe/report', async (c) => {
         await pool.query(
             `INSERT INTO user_subscribe (open_id, template_id, biz_type, created_at)
              VALUES ?
-             ON DUPLICATE KEY UPDATE updated_at = NOW()`,
+             ON DUPLICATE KEY UPDATE
+                biz_type = VALUES(biz_type),
+                updated_at = NOW()`,
             [values]
         );
 

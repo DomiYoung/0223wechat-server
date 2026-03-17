@@ -4,7 +4,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "migrate:reservation-unique": "tsx scripts/db_migrate_reservation_unique.ts",
+    "migrate:core": "tsx scripts/db_migrate_core_constraints.ts"
   },
   "dependencies": {
     "@alicloud/dysmsapi20170525": "^4.5.0",

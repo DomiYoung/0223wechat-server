@@ -3,6 +3,7 @@
  */
 import axios from 'axios';
 import pool from '../db.js';
+import { getWechatConfig } from './wechat-config.js';
 
 interface SubscribeMessageData {
   [key: string]: {
@@ -25,12 +26,7 @@ async function getAccessToken(): Promise<string> {
     return cachedAccessToken;
   }
 
-  const appId = process.env.WECHAT_APPID;
-  const appSecret = process.env.WECHAT_APPSECRET;
-
-  if (!appId || !appSecret) {
-    throw new Error('微信配置缺失：WECHAT_APPID 或 WECHAT_APPSECRET');
-  }
+  const { appId, appSecret } = getWechatConfig();
 
   try {
     const response = await axios.get(
@@ -116,7 +112,7 @@ export async function sendFormSubmitNotification(
   try {
     // 从数据库查询用户是否授权了该模板
     const [rows] = await pool.execute(
-      'SELECT template_id FROM user_subscribe WHERE open_id = ? AND biz_type = ? LIMIT 1',
+      'SELECT template_id FROM user_subscribe WHERE open_id = ? AND biz_type = ? ORDER BY updated_at DESC, id DESC LIMIT 1',
       [openId, 'form_submit']
     ) as any;
 
@@ -174,7 +170,7 @@ export async function sendNewLeadNotificationToAdmins(
       try {
         // 查询管理员是否授权了新留资通知模板
         const [rows] = await pool.execute(
-          'SELECT template_id FROM user_subscribe WHERE open_id = ? AND biz_type = ? LIMIT 1',
+          'SELECT template_id FROM user_subscribe WHERE open_id = ? AND biz_type = ? ORDER BY updated_at DESC, id DESC LIMIT 1',
           [adminOpenId, 'new_lead_admin']
         ) as any;
 

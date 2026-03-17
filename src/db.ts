@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import mysql from 'mysql2/promise';
+import { hashAdminPassword } from './security/admin-auth.js';
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
@@ -30,7 +31,7 @@ export async function initDB() {
         CREATE TABLE IF NOT EXISTS admin (
             id INT AUTO_INCREMENT PRIMARY KEY,
             username VARCHAR(50) NOT NULL UNIQUE COMMENT '登录用户名',
-            password_hash VARCHAR(255) NOT NULL COMMENT '密码(待迁移bcrypt)',
+            password_hash VARCHAR(255) NOT NULL COMMENT '密码哈希',
             display_name VARCHAR(50) DEFAULT '' COMMENT '显示名称',
             role ENUM('super','editor','viewer') DEFAULT 'editor' COMMENT '角色',
             is_active TINYINT(1) DEFAULT 1 COMMENT '是否启用',
@@ -186,6 +187,9 @@ export async function initDB() {
     try {
         await db.execute(`ALTER TABLE reservation ADD COLUMN submit_count INT DEFAULT 1 COMMENT '提交次数' AFTER lead_meta`);
     } catch (_) { /* 列已存在则忽略 */ }
+    try {
+        await db.execute('CREATE UNIQUE INDEX uk_reservation_mobile ON reservation(mobile)');
+    } catch (_) { /* 索引已存在则忽略 */ }
 
     // 8. lead_auth_log — 手机号授权获客日志
     await db.execute(`
@@ -461,9 +465,10 @@ export async function initDB() {
             biz_type VARCHAR(50) NOT NULL COMMENT '业务类型',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-            UNIQUE KEY uk_openid_template (open_id, template_id),
+            UNIQUE KEY uk_openid_biztype_template (open_id, biz_type, template_id),
             INDEX idx_openid (open_id),
-            INDEX idx_biztype (biz_type)
+            INDEX idx_biztype (biz_type),
+            INDEX idx_openid_biztype_updated (open_id, biz_type, updated_at, id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户订阅消息记录'
     `);
 
@@ -491,15 +496,18 @@ export async function initDB() {
     // 数据迁移：从 venue/reservation 的 city 文本迁移到 city 表
     // ============================================================
     await migrateCityData(db);
+    await ensureUserSubscribeUniqueByBizType();
+    await ensureCoreForeignKeys();
 
     // ============================================================
     // 种子数据（仅首次启动时填充）
     // ============================================================
     const [adminRows] = await db.execute('SELECT COUNT(*) as count FROM admin') as any;
     if (adminRows[0].count === 0) {
+        const defaultAdminPasswordHash = await hashAdminPassword('wedding2024');
         await db.execute(
             'INSERT INTO admin (username, password_hash, display_name, role) VALUES (?, ?, ?, ?)',
-            ['admin', 'wedding2024', '超级管理员', 'super']
+            ['admin', defaultAdminPasswordHash, '超级管理员', 'super']
         );
         console.log('👤 默认管理员已创建: admin / wedding2024');
     }
@@ -557,6 +565,223 @@ export async function initDB() {
     }
 
     console.log('✅ 数据库初始化完毕 — 16张表全部就绪');
+}
+
+export async function ensureReservationMobileUnique() {
+    const conn = await pool.getConnection();
+    try {
+        await conn.beginTransaction();
+
+        // 0) 先标准化手机号，避免因为空格或空串导致唯一索引创建失败
+        await conn.execute(`
+            UPDATE reservation
+            SET mobile = TRIM(mobile)
+            WHERE mobile <> TRIM(mobile)
+        `);
+        await conn.execute(`
+            UPDATE reservation
+            SET mobile = CONCAT('_invalid_', id)
+            WHERE mobile IS NULL OR mobile = ''
+        `);
+
+        // 1) 清理历史重复 mobile：保留 submit_count 最大/更新时间最新的一条，其余合并计数后删除
+        // 说明：在没有唯一索引之前，线上可能已经产生重复 mobile。
+        // 合并策略：
+        // - keep_id 取 updated_at 最大的那条（updated_at 相同则 id 最大）
+        // - submit_count 合并为 SUM(submit_count)（为空按 1 计）
+        // - 其余字段保持 keep_id 那条的值，不做字段层合并（避免误覆盖）
+        await conn.execute('DROP TEMPORARY TABLE IF EXISTS tmp_res_keep');
+        await conn.execute(`
+            CREATE TEMPORARY TABLE tmp_res_keep AS
+            SELECT x.mobile, x.keep_id, x.total_submit
+            FROM (
+                SELECT
+                    r.mobile,
+                    SUBSTRING_INDEX(
+                        GROUP_CONCAT(r.id ORDER BY r.updated_at DESC, r.id DESC),
+                        ',', 1
+                    ) AS keep_id,
+                    SUM(COALESCE(NULLIF(r.submit_count, 0), 1)) AS total_submit,
+                    COUNT(*) AS cnt
+                FROM reservation r
+                WHERE r.mobile IS NOT NULL AND r.mobile <> ''
+                GROUP BY r.mobile
+                HAVING cnt > 1
+            ) x
+        `);
+
+        // 合并 submit_count 到保留行
+        await conn.execute(`
+            UPDATE reservation r
+            INNER JOIN tmp_res_keep t ON t.keep_id = r.id
+            SET r.submit_count = t.total_submit
+        `);
+
+        // 删除重复行
+        await conn.execute(`
+            DELETE r
+            FROM reservation r
+            INNER JOIN tmp_res_keep t ON t.mobile = r.mobile
+            WHERE r.id <> t.keep_id
+        `);
+
+        // 2) 创建唯一索引（幂等）
+        try {
+            await conn.execute('CREATE UNIQUE INDEX uk_reservation_mobile ON reservation(mobile)');
+        } catch (_) {
+            // index exists or can't be created; ignore here
+        }
+
+        await conn.commit();
+    } catch (err) {
+        try { await conn.rollback(); } catch (_) {}
+        throw err;
+    } finally {
+        conn.release();
+    }
+}
+
+export async function ensureUserSubscribeUniqueByBizType() {
+    const conn = await pool.getConnection();
+    try {
+        // 允许在 migrations 阶段独立运行：如果表还不存在，直接跳过。
+        const [tables] = await conn.query(`SHOW TABLES LIKE 'user_subscribe'`) as any;
+        if (!Array.isArray(tables) || tables.length === 0) return;
+
+        await conn.beginTransaction();
+        await conn.execute(`
+            UPDATE user_subscribe
+            SET biz_type = 'general'
+            WHERE biz_type IS NULL OR biz_type = ''
+        `);
+
+        await conn.execute('DROP TEMPORARY TABLE IF EXISTS tmp_user_subscribe_keep');
+        await conn.execute(`
+            CREATE TEMPORARY TABLE tmp_user_subscribe_keep AS
+            SELECT
+                x.open_id,
+                x.template_id,
+                x.biz_type,
+                x.keep_id
+            FROM (
+                SELECT
+                    us.open_id,
+                    us.template_id,
+                    us.biz_type,
+                    SUBSTRING_INDEX(
+                        GROUP_CONCAT(us.id ORDER BY us.updated_at DESC, us.id DESC),
+                        ',', 1
+                    ) AS keep_id,
+                    COUNT(*) AS cnt
+                FROM user_subscribe us
+                GROUP BY us.open_id, us.template_id, us.biz_type
+                HAVING cnt > 1
+            ) x
+        `);
+
+        await conn.execute(`
+            DELETE us
+            FROM user_subscribe us
+            INNER JOIN tmp_user_subscribe_keep t
+                ON t.open_id = us.open_id
+               AND t.template_id = us.template_id
+               AND t.biz_type = us.biz_type
+            WHERE us.id <> t.keep_id
+        `);
+        await conn.commit();
+
+        try { await conn.execute('DROP INDEX uk_openid_template ON user_subscribe'); } catch (_) {}
+        try { await conn.execute('CREATE UNIQUE INDEX uk_openid_biztype_template ON user_subscribe(open_id, biz_type, template_id)'); } catch (_) {}
+        try { await conn.execute('CREATE INDEX idx_openid_biztype_updated ON user_subscribe(open_id, biz_type, updated_at, id)'); } catch (_) {}
+    } catch (err) {
+        try { await conn.rollback(); } catch (_) {}
+        throw err;
+    } finally {
+        conn.release();
+    }
+}
+
+export async function ensureCoreForeignKeys() {
+    const conn = await pool.getConnection();
+    try {
+        // migrations 阶段允许独立运行：如果核心表不存在，直接跳过。
+        const [venueTables] = await conn.query(`SHOW TABLES LIKE 'venue'`) as any;
+        const [brandTables] = await conn.query(`SHOW TABLES LIKE 'brand'`) as any;
+        const [caseTables] = await conn.query(`SHOW TABLES LIKE 'wedding_case'`) as any;
+        const [caseCatTables] = await conn.query(`SHOW TABLES LIKE 'case_category'`) as any;
+        const [cityTables] = await conn.query(`SHOW TABLES LIKE 'city'`) as any;
+        const [reservationTables] = await conn.query(`SHOW TABLES LIKE 'reservation'`) as any;
+        if (!Array.isArray(venueTables) || venueTables.length === 0) return;
+        if (!Array.isArray(caseTables) || caseTables.length === 0) return;
+
+        // 先清理历史脏数据，再补外键约束，避免直接加约束失败。
+        await conn.beginTransaction();
+
+        const [venueBrandCol] = await conn.query(`SHOW COLUMNS FROM venue LIKE 'brand_id'`) as any;
+        const hasVenueBrand = Array.isArray(venueBrandCol) && venueBrandCol.length > 0;
+        const [caseCatCol] = await conn.query(`SHOW COLUMNS FROM wedding_case LIKE 'category_id'`) as any;
+        const hasCaseCategory = Array.isArray(caseCatCol) && caseCatCol.length > 0;
+        const [venueCityCol] = await conn.query(`SHOW COLUMNS FROM venue LIKE 'city_id'`) as any;
+        const hasVenueCityId = Array.isArray(venueCityCol) && venueCityCol.length > 0;
+        const [resCityCol] = await conn.query(`SHOW COLUMNS FROM reservation LIKE 'city_id'`) as any;
+        const hasReservationCityId = Array.isArray(resCityCol) && resCityCol.length > 0;
+
+        if (hasVenueBrand && Array.isArray(brandTables) && brandTables.length > 0) {
+            await conn.execute(`
+                UPDATE venue v
+                LEFT JOIN brand b ON b.id = v.brand_id
+                SET v.brand_id = NULL
+                WHERE v.brand_id IS NOT NULL AND b.id IS NULL
+            `);
+        }
+        if (hasCaseCategory && Array.isArray(caseCatTables) && caseCatTables.length > 0) {
+            await conn.execute(`
+                UPDATE wedding_case wc
+                LEFT JOIN case_category cc ON cc.id = wc.category_id
+                SET wc.category_id = NULL
+                WHERE wc.category_id IS NOT NULL AND cc.id IS NULL
+            `);
+        }
+        if (hasVenueCityId && Array.isArray(cityTables) && cityTables.length > 0) {
+            await conn.execute(`
+                UPDATE venue v
+                LEFT JOIN city c ON c.id = v.city_id
+                SET v.city_id = NULL
+                WHERE v.city_id IS NOT NULL AND c.id IS NULL
+            `);
+        }
+        if (
+            hasReservationCityId &&
+            Array.isArray(cityTables) && cityTables.length > 0 &&
+            Array.isArray(reservationTables) && reservationTables.length > 0
+        ) {
+            await conn.execute(`
+                UPDATE reservation r
+                LEFT JOIN city c ON c.id = r.city_id
+                SET r.city_id = NULL
+                WHERE r.city_id IS NOT NULL AND c.id IS NULL
+            `);
+        }
+        await conn.commit();
+
+        if (hasVenueCityId && Array.isArray(cityTables) && cityTables.length > 0) {
+            try { await conn.execute('ALTER TABLE venue ADD CONSTRAINT fk_venue_city FOREIGN KEY (city_id) REFERENCES city(id) ON DELETE SET NULL'); } catch (_) {}
+        }
+        if (hasReservationCityId && Array.isArray(cityTables) && cityTables.length > 0 && Array.isArray(reservationTables) && reservationTables.length > 0) {
+            try { await conn.execute('ALTER TABLE reservation ADD CONSTRAINT fk_res_city FOREIGN KEY (city_id) REFERENCES city(id) ON DELETE SET NULL'); } catch (_) {}
+        }
+        if (hasVenueBrand && Array.isArray(brandTables) && brandTables.length > 0) {
+            try { await conn.execute('ALTER TABLE venue ADD CONSTRAINT fk_venue_brand FOREIGN KEY (brand_id) REFERENCES brand(id) ON DELETE SET NULL'); } catch (_) {}
+        }
+        if (hasCaseCategory && Array.isArray(caseCatTables) && caseCatTables.length > 0) {
+            try { await conn.execute('ALTER TABLE wedding_case ADD CONSTRAINT fk_case_category FOREIGN KEY (category_id) REFERENCES case_category(id) ON DELETE SET NULL'); } catch (_) {}
+        }
+    } catch (err) {
+        try { await conn.rollback(); } catch (_) {}
+        throw err;
+    } finally {
+        conn.release();
+    }
 }
 
 /**

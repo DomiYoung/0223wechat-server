@@ -12,13 +12,26 @@ import OpenApi from '@alicloud/openapi-client';
  * 初始化短信客户端
  */
 function createSmsClient() {
+  const accessKeyId = process.env.ALIYUN_SMS_ACCESS_KEY_ID || process.env.ALIYUN_OSS_ACCESS_KEY_ID;
+  const accessKeySecret = process.env.ALIYUN_SMS_ACCESS_KEY_SECRET || process.env.ALIYUN_OSS_ACCESS_KEY_SECRET;
+  if (!accessKeyId || !accessKeySecret) {
+    throw new Error('短信配置缺失：请设置 ALIYUN_SMS_ACCESS_KEY_ID / ALIYUN_SMS_ACCESS_KEY_SECRET（或兼容使用 OSS 的 AK）');
+  }
   const config = new OpenApi.Config({
-    // 复用 OSS 的 AccessKey
-    accessKeyId: process.env.ALIYUN_OSS_ACCESS_KEY_ID,
-    accessKeySecret: process.env.ALIYUN_OSS_ACCESS_KEY_SECRET,
+    accessKeyId,
+    accessKeySecret,
     endpoint: 'dysmsapi.aliyuncs.com'
   });
   return new Dysmsapi20170525.default(config);
+}
+
+let smsClient: Dysmsapi20170525.default | null = null;
+
+function getSmsClient() {
+  if (!smsClient) {
+    smsClient = createSmsClient();
+  }
+  return smsClient;
 }
 
 /**
@@ -29,7 +42,7 @@ async function sendSMS(
   templateCode: string,
   templateParam: Record<string, string>
 ): Promise<boolean> {
-  const client = createSmsClient();
+  const client = getSmsClient();
 
   try {
     const request = new Dysmsapi20170525.SendSmsRequest({

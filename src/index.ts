@@ -1,9 +1,8 @@
 import { Hono } from 'hono';
-import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { logger } from 'hono/logger';
-import pool, { initDB } from './db.js';
+import pool, { ensureCoreForeignKeys, ensureReservationMobileUnique, ensureUserSubscribeUniqueByBizType, initDB } from './db.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -12,13 +11,74 @@ import { queryThemes, toPublicTheme, toPublicThemeDetail, toAdminTheme } from '.
 import mpRoutes from './routes/mp.js';
 import admin305Routes from './routes/admin305.js';
 import api3Routes from './routes/api3.js';
+import { forget, forgetByPrefix } from './response-cache.js';
+import { adminAuthMiddleware } from './middleware/admin-auth.js';
+import { hashAdminPassword, issueAdminToken, verifyAdminPassword } from './security/admin-auth.js';
+import { getWechatConfig } from './services/wechat-config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = new Hono();
 
+function invalidateCityCaches() {
+    forget('cities:v1');
+    forgetByPrefix('venues:v1:');
+}
+
 app.use('*', logger());
 
-app.use('*', cors());
+const corsAllowedOrigins = new Set(
+    [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:5173',
+        ...(process.env.CORS_ORIGIN_WHITELIST || '')
+            .split(',')
+            .map((origin) => origin.trim())
+            .filter(Boolean),
+    ]
+);
+
+app.use('*', async (c, next) => {
+    const origin = c.req.header('origin');
+    const requestPath = c.req.path || '';
+    const isAdminCors = requestPath.startsWith('/api/admin') || requestPath === '/api/upload';
+    const isAllowedOrigin = !!origin && corsAllowedOrigins.has(origin);
+
+    if (c.req.method === 'OPTIONS') {
+        // Public endpoints: permissive CORS (same as historical behavior).
+        if (!isAdminCors) {
+            c.header('Access-Control-Allow-Origin', '*');
+            c.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+            c.header('Access-Control-Allow-Headers', 'Authorization,Content-Type');
+            c.header('Access-Control-Max-Age', '86400');
+            return c.body(null, 204);
+        }
+
+        // Admin endpoints: origin allowlist.
+        if (!origin || !isAllowedOrigin) return c.body(null, 403);
+        c.header('Access-Control-Allow-Origin', origin);
+        c.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+        c.header('Access-Control-Allow-Headers', 'Authorization,Content-Type');
+        c.header('Access-Control-Max-Age', '86400');
+        c.header('Vary', 'Origin');
+        return c.body(null, 204);
+    }
+
+    await next();
+
+    if (!isAdminCors) {
+        c.header('Access-Control-Allow-Origin', '*');
+        c.header('Access-Control-Allow-Headers', 'Authorization,Content-Type');
+        return;
+    }
+
+    if (isAllowedOrigin) {
+        c.header('Access-Control-Allow-Origin', origin);
+        c.header('Access-Control-Allow-Headers', 'Authorization,Content-Type');
+        c.header('Vary', 'Origin');
+    }
+});
 
 const ossClient = new OSS({
     region: process.env.ALIYUN_OSS_REGION || 'oss-cn-shanghai',
@@ -39,14 +99,7 @@ app.onError((err, c) => {
 });
 
 app.use('/uploads/*', serveStatic({ root: './' }));
-app.use('/assets/*', async (c, next) => {
-    const filePath = path.join(process.cwd(), 'public', c.req.path);
-    if (!fs.existsSync(filePath)) {
-        console.warn(`[ASSETS] File not found: ${filePath}`);
-        return c.json({ errcode: 404, errmsg: 'File not found' }, 404);
-    }
-    return serveStatic({ root: './public' })(c, next);
-});
+app.use('/assets/*', serveStatic({ root: './public' }));
 
 // ============================================================
 // 辅助函数
@@ -227,17 +280,28 @@ function toNullableJson(payload: Record<string, any>): string | null {
     return Object.keys(payload).length > 0 ? JSON.stringify(payload) : null;
 }
 
+async function insertCaseImagesBulk(caseId: number | string, images: any[]): Promise<void> {
+    const values = images
+        .map((image, index) => {
+            const url = typeof image === 'string'
+                ? image
+                : image?.image_url || image?.url || '';
+            return [caseId, String(url).trim(), index];
+        })
+        .filter(([, url]) => !!url);
+
+    if (values.length === 0) return;
+
+    await pool.query(
+        'INSERT INTO case_image (case_id, image_url, sort_order) VALUES ?',
+        [values]
+    );
+}
+
 // ============================================================
 // 认证中间件
 // ============================================================
-const authMiddleware = async (c: any, next: () => Promise<void>) => {
-    const token = c.req.header('Authorization')?.replace('Bearer ', '');
-    if (!token) return c.json({ error: '未提供认证令牌' }, 401);
-    if (!token.startsWith('admin-token-')) {
-        return c.json({ error: '无效的认证令牌' }, 401);
-    }
-    await next();
-};
+const authMiddleware = adminAuthMiddleware;
 
 // ============================================================
 // 登录
@@ -249,23 +313,49 @@ app.post('/api/admin/login', async (c) => {
             return c.json({ error: '请提供用户名和密码' }, 400);
         }
         const [rows] = await pool.execute(
-            'SELECT id, username, display_name, role FROM admin WHERE username = ? AND password_hash = ? AND is_active = 1',
-            [username, password]
+            'SELECT id, username, password_hash, display_name, role FROM admin WHERE username = ? AND is_active = 1 LIMIT 1',
+            [username]
         ) as any;
         if (rows.length === 0) {
             return c.json({ error: '用户名或密码错误' }, 401);
         }
         const admin = rows[0];
+        const passwordCheck = await verifyAdminPassword(password, admin.password_hash);
+        if (!passwordCheck.ok) {
+            return c.json({ error: '用户名或密码错误' }, 401);
+        }
+
+        if (passwordCheck.needsUpgrade) {
+            const nextHash = await hashAdminPassword(password);
+            await pool.execute(
+                'UPDATE admin SET password_hash = ? WHERE id = ?',
+                [nextHash, admin.id]
+            );
+        }
+
         return c.json({
             code: 0,
             data: {
-                token: `admin-token-${admin.id}`,
+                token: issueAdminToken({
+                    id: admin.id,
+                    username: admin.username,
+                    role: admin.role,
+                    displayName: admin.display_name || '',
+                }),
                 admin: { id: admin.id, username: admin.username, display_name: admin.display_name, role: admin.role },
             },
         });
     } catch (err: any) {
         return c.json({ error: err.message }, 500);
     }
+});
+
+app.use('/api/admin/*', async (c, next) => {
+    if (c.req.path === '/api/admin/login') {
+        await next();
+        return;
+    }
+    await authMiddleware(c, next);
 });
 
 // ============================================================
@@ -280,12 +370,7 @@ app.post('/api/wx/login', async (c) => {
             return c.json({ error: 'code 不能为空' }, 400);
         }
 
-        const appId = process.env.WX_APPID;
-        const appSecret = process.env.WX_APPSECRET;
-
-        if (!appId || !appSecret || appSecret === 'your_appsecret_here') {
-            return c.json({ error: '微信配置未完成，请联系管理员' }, 500);
-        }
+        const { appId, appSecret } = getWechatConfig();
 
         const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${appId}&secret=${appSecret}&js_code=${code}&grant_type=authorization_code`;
 
@@ -337,7 +422,7 @@ app.post('/api/wx/decrypt-phone', async (c) => {
         const phoneInfo = JSON.parse(decrypted);
 
         // 验证 appId
-        const appId = process.env.WX_APPID;
+        const { appId } = getWechatConfig();
         if (phoneInfo.watermark?.appid !== appId) {
             console.warn('AppId 不匹配:', phoneInfo.watermark?.appid, '!=', appId);
         }
@@ -446,6 +531,7 @@ app.post('/api/admin/cities', authMiddleware, async (c) => {
             'INSERT INTO city (name, region, sort_order, is_active) VALUES (?, ?, ?, ?)',
             [name, region || '', sort_order || 0, is_active ?? 1]
         ) as any;
+        invalidateCityCaches();
         return c.json({ code: 0, data: { id: result.insertId } });
     } catch (err: any) {
         if (err.code === 'ER_DUP_ENTRY') return c.json({ error: '城市已存在' }, 409);
@@ -462,6 +548,7 @@ app.put('/api/admin/cities/:id', authMiddleware, async (c) => {
             'UPDATE city SET name = COALESCE(?, name), region = COALESCE(?, region), sort_order = COALESCE(?, sort_order), is_active = COALESCE(?, is_active) WHERE id = ?',
             [name, region, sort_order, is_active, id]
         );
+        invalidateCityCaches();
         return c.json({ code: 0 });
     } catch (err: any) {
         if (err.code === 'ER_DUP_ENTRY') return c.json({ error: '城市名称重复' }, 409);
@@ -479,6 +566,7 @@ app.delete('/api/admin/cities/:id', authMiddleware, async (c) => {
             return c.json({ error: `该城市下有 ${venues[0].count} 个门店，无法删除` }, 400);
         }
         await pool.execute('DELETE FROM city WHERE id = ?', [id]);
+        invalidateCityCaches();
         return c.json({ code: 0 });
     } catch (err: any) {
         return c.json({ error: err.message }, 500);
@@ -685,13 +773,7 @@ app.post('/api/admin/themes', authMiddleware, async (c) => {
 
         // 批量插入图片
         if (images && Array.isArray(images) && images.length > 0) {
-            for (let i = 0; i < images.length; i++) {
-                const url = images[i].image_url || images[i].url || images[i];
-                await pool.execute(
-                    'INSERT INTO case_image (case_id, image_url, sort_order) VALUES (?, ?, ?)',
-                    [caseId, url, i]
-                );
-            }
+            await insertCaseImagesBulk(caseId, images);
         }
 
         return c.json({ code: 0, data: { id: caseId } });
@@ -717,13 +799,7 @@ app.put('/api/admin/themes/:id', authMiddleware, async (c) => {
         // 更新图片：先删后插（事务安全由外键 CASCADE 保证）
         if (images && Array.isArray(images)) {
             await pool.execute('DELETE FROM case_image WHERE case_id = ?', [id]);
-            for (let i = 0; i < images.length; i++) {
-                const url = images[i].image_url || images[i].url || images[i];
-                await pool.execute(
-                    'INSERT INTO case_image (case_id, image_url, sort_order) VALUES (?, ?, ?)',
-                    [id, url, i]
-                );
-            }
+            await insertCaseImagesBulk(id, images);
         }
 
         return c.json({ code: 0 });
@@ -829,9 +905,32 @@ app.post('/api/reservation', async (c) => {
         const leadMeta = buildLeadMeta(body);
         const wechatOpenId = wechat_openid || body.openId || body.openid || null;
 
+        // reservation.mobile 具有唯一索引：同手机号的重复提交需要原子 upsert，避免并发插重复/抛重复键。
+        // 业务语义：
+        // - status/remark 属于运营跟进，不允许被二次提交覆盖
+        // - submit_count 记录“该手机号提交次数”，每次重复提交 +1
+        // - 其余字段尽量只用“非空新值”覆盖旧值
         const [result] = await pool.execute(
-            `INSERT INTO reservation (name, mobile, wechat_openid, wedding_date, tables_count, venue_id, case_id, source, sub_platform, city, city_id, lead_meta)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO reservation (
+                name, mobile, wechat_openid, wedding_date, tables_count,
+                venue_id, case_id, source, sub_platform, city, city_id, lead_meta
+             )
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                id = LAST_INSERT_ID(id),
+                updated_at = CURRENT_TIMESTAMP,
+                submit_count = COALESCE(submit_count, 1) + 1,
+                name = VALUES(name),
+                wechat_openid = COALESCE(VALUES(wechat_openid), wechat_openid),
+                wedding_date = IF(VALUES(wedding_date) <> '', VALUES(wedding_date), wedding_date),
+                tables_count = IF(VALUES(tables_count) <> 0, VALUES(tables_count), tables_count),
+                venue_id = COALESCE(VALUES(venue_id), venue_id),
+                case_id = COALESCE(VALUES(case_id), case_id),
+                source = IF(VALUES(source) <> '', VALUES(source), source),
+                sub_platform = IF(VALUES(sub_platform) <> '', VALUES(sub_platform), sub_platform),
+                city = IF(VALUES(city) <> '', VALUES(city), city),
+                city_id = COALESCE(VALUES(city_id), city_id),
+                lead_meta = COALESCE(VALUES(lead_meta), lead_meta)`,
             [
                 name,
                 mobile,
@@ -1111,8 +1210,26 @@ app.post('/api/booking', async (c) => {
         }
 
         const [result] = await pool.execute(
-            `INSERT INTO reservation (name, mobile, wechat_openid, city, city_id, source, sub_platform, venue_id, case_id, wedding_date, tables_count, lead_meta)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO reservation (
+                name, mobile, wechat_openid, city, city_id, source, sub_platform,
+                venue_id, case_id, wedding_date, tables_count, lead_meta
+             )
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                id = LAST_INSERT_ID(id),
+                updated_at = CURRENT_TIMESTAMP,
+                submit_count = COALESCE(submit_count, 1) + 1,
+                name = VALUES(name),
+                wechat_openid = COALESCE(VALUES(wechat_openid), wechat_openid),
+                city = IF(VALUES(city) <> '', VALUES(city), city),
+                city_id = COALESCE(VALUES(city_id), city_id),
+                source = IF(VALUES(source) <> '', VALUES(source), source),
+                sub_platform = IF(VALUES(sub_platform) <> '', VALUES(sub_platform), sub_platform),
+                venue_id = COALESCE(VALUES(venue_id), venue_id),
+                case_id = COALESCE(VALUES(case_id), case_id),
+                wedding_date = IF(VALUES(wedding_date) <> '', VALUES(wedding_date), wedding_date),
+                tables_count = IF(VALUES(tables_count) <> 0, VALUES(tables_count), tables_count),
+                lead_meta = COALESCE(VALUES(lead_meta), lead_meta)`,
             [
                 name,
                 mobile,
@@ -1246,13 +1363,28 @@ app.post('/api3/zhan/xapp/form/list', async (c) => {
             [wid, pageSize, offset]
         ) as any;
 
+        const submitIds = rows.map((row: any) => row.id);
+        const fieldsBySubmitId = new Map<number, any[]>();
+        if (submitIds.length > 0) {
+            const placeholders = submitIds.map(() => '?').join(',');
+            const [fieldRows] = await pool.query(
+                `SELECT submit_id, field_key, label, mark, mode, value_json, show_value
+                 FROM lead_submit_field
+                 WHERE submit_id IN (${placeholders})
+                 ORDER BY submit_id ASC, sort_order ASC`,
+                submitIds
+            ) as any;
+
+            for (const field of fieldRows) {
+                const group = fieldsBySubmitId.get(field.submit_id) || [];
+                group.push(field);
+                fieldsBySubmitId.set(field.submit_id, group);
+            }
+        }
+
         const list = [];
         for (const row of rows) {
-            // 查询子表对应字段恢复
-            const [fields] = await pool.execute(
-                'SELECT field_key, label, mark, mode, value_json, show_value FROM lead_submit_field WHERE submit_id = ? ORDER BY sort_order ASC',
-                [row.id]
-            ) as any;
+            const fields = fieldsBySubmitId.get(row.id) || [];
 
             const dataArray = fields.map((f: any) => ({
                 fieldKey: f.field_key,
@@ -1334,6 +1466,7 @@ app.post('/api3/zhan/xapp/form/detail', async (c) => {
 // ============================================================
 app.post('/api/upload', authMiddleware, async (c) => {
     try {
+        const maxUploadSizeBytes = Number.parseInt(process.env.UPLOAD_MAX_SIZE_BYTES || '', 10) || 10 * 1024 * 1024;
         const traceId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const userAgent = c.req.header('user-agent') || '';
         const ip = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || '';
@@ -1348,6 +1481,10 @@ app.post('/api/upload', authMiddleware, async (c) => {
         if (file.size <= 0) {
             console.warn(`[UPLOAD][${traceId}] file.size=0, possible macOS iCloud placeholder or incomplete sync`);
             return c.json({ error: '上传文件为空（0B），请重新选择图片' }, 400);
+        }
+        if (file.size > maxUploadSizeBytes) {
+            console.warn(`[UPLOAD][${traceId}] file too large size=${file.size} limit=${maxUploadSizeBytes}`);
+            return c.json({ error: `文件大小不能超过 ${Math.floor(maxUploadSizeBytes / 1024 / 1024)}MB` }, 400);
         }
 
         const ext = path.extname(file.name) || '.jpg';
@@ -1391,18 +1528,36 @@ app.route('/api3', api3Routes);          // 0305 1:1 模拟接口
 // 启动
 // ============================================================
 const PORT = parseInt(process.env.PORT || '8199');
+const RUN_DB_INIT = String(process.env.RUN_DB_INIT || '').toLowerCase() === '1' ||
+    String(process.env.RUN_DB_INIT || '').toLowerCase() === 'true';
+const RUN_DB_MIGRATIONS = String(process.env.RUN_DB_MIGRATIONS || '').toLowerCase() === '1' ||
+    String(process.env.RUN_DB_MIGRATIONS || '').toLowerCase() === 'true';
 
-initDB()
-    .then(() => {
-        serve({
-            fetch: app.fetch,
-            port: PORT,
-            hostname: '0.0.0.0',
-        }, (info) => {
-            console.log(`🚀 Wedding CMS API (Hono) running on http://0.0.0.0:${info.port}`);
-        });
-    })
-    .catch((err) => {
-        console.error('❌ 数据库初始化失败:', err);
-        process.exit(1);
+async function boot() {
+    if (RUN_DB_INIT) {
+        console.log('[BOOT] RUN_DB_INIT enabled: running initDB()');
+        await initDB();
+    } else {
+        console.log('[BOOT] RUN_DB_INIT disabled: skipping initDB() (recommended for production)');
+    }
+
+    if (RUN_DB_MIGRATIONS) {
+        console.log('[BOOT] RUN_DB_MIGRATIONS enabled: running safety migrations');
+        await ensureReservationMobileUnique();
+        await ensureUserSubscribeUniqueByBizType();
+        await ensureCoreForeignKeys();
+    }
+
+    serve({
+        fetch: app.fetch,
+        port: PORT,
+        hostname: '0.0.0.0',
+    }, (info) => {
+        console.log(`🚀 Wedding CMS API (Hono) running on http://0.0.0.0:${info.port}`);
     });
+}
+
+boot().catch((err) => {
+    console.error('❌ Boot failed:', err);
+    process.exit(1);
+});

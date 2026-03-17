@@ -4,6 +4,7 @@ import fsPromises from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pool from '../db.js';
+import { remember } from '../response-cache.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const api3 = new Hono();
@@ -57,27 +58,6 @@ async function readApiDumpJson(fileName: string) {
     return parsed;
 }
 
-async function insertLeadSubmitFields(submitId: number, data: any[]) {
-    if (!Array.isArray(data) || data.length === 0) return;
-
-    const values = data.map((field: any, index: number) => [
-        submitId,
-        field.fieldKey || '',
-        field.label || '',
-        field.mark || '',
-        field.mode || '',
-        JSON.stringify(field.value ?? ''),
-        field.showValue || '',
-        index,
-    ]);
-
-    await pool.query(
-        `INSERT INTO lead_submit_field (submit_id, field_key, label, mark, mode, value_json, show_value, sort_order)
-         VALUES ?`,
-        [values]
-    );
-}
-
 // ========================
 // 1. 获取页面配置 (Core)
 // ========================
@@ -120,8 +100,10 @@ api3.post('/zhan/xapp/page', async (c) => {
 // ========================
 const getMockLoginResponse = async () => {
     try {
-        const [rows] = await pool.execute('SELECT name, logo_url FROM brand WHERE is_active = 1 LIMIT 1') as any;
-        const brand = rows[0] || { name: '嘉美麓德', logo_url: '' };
+        const brand = await remember('api3:brand:min', 5 * 60_000, async () => {
+            const [rows] = await pool.execute('SELECT name, logo_url FROM brand WHERE is_active = 1 LIMIT 1') as any;
+            return rows[0] || { name: '嘉美麓德', logo_url: '' };
+        });
         
         return {
             wid: 10838588381,
@@ -154,8 +136,10 @@ api3.post('/login', async (c) => c.json(ok(await getMockLoginResponse())));
 // ========================
 api3.post('/zhan/xapp/agreement/detail', async (c) => {
     try {
-        const [rows] = await pool.execute('SELECT name, logo_url FROM brand WHERE is_active = 1 LIMIT 1') as any;
-        const brand = rows[0] || { name: '嘉美麓德', logo_url: '' };
+        const brand = await remember('api3:brand:min', 5 * 60_000, async () => {
+            const [rows] = await pool.execute('SELECT name, logo_url FROM brand WHERE is_active = 1 LIMIT 1') as any;
+            return rows[0] || { name: '嘉美麓德', logo_url: '' };
+        });
         
         return c.json(ok({
             status: 0,
@@ -177,13 +161,14 @@ api3.post('/zhan/xapp/useragreement/list', (c) => c.json(ok([])));
 // ========================
 api3.post('/zhan/xapp/getContentPageClassifyData', async (c) => {
     try {
-        const [caseCats] = await pool.execute('SELECT id, name FROM case_category WHERE is_active = 1 ORDER BY sort_order ASC') as any;
-        const [pkgCats] = await pool.execute('SELECT id, name FROM package_category WHERE is_active = 1 ORDER BY sort_order ASC') as any;
-        
-        const classifyList = [
-            ...caseCats.map((cc: any) => ({ id: cc.id, name: cc.name, type: 1 })),
-            ...pkgCats.map((pc: any) => ({ id: pc.id, name: pc.name, type: 2 }))
-        ];
+        const classifyList = await remember('api3:classify:list', 5 * 60_000, async () => {
+            const [caseCats] = await pool.execute('SELECT id, name FROM case_category WHERE is_active = 1 ORDER BY sort_order ASC') as any;
+            const [pkgCats] = await pool.execute('SELECT id, name FROM package_category WHERE is_active = 1 ORDER BY sort_order ASC') as any;
+            return [
+                ...caseCats.map((cc: any) => ({ id: cc.id, name: cc.name, type: 1 })),
+                ...pkgCats.map((pc: any) => ({ id: pc.id, name: pc.name, type: 2 }))
+            ];
+        });
 
         return c.json(ok({
             classifyList,
@@ -258,16 +243,6 @@ api3.post('/zhan/xapp/submit', async (c) => {
             return c.json({ errcode: 400, errmsg: '提交数据为空' }, 400);
         }
 
-        // === 1. 写入 lead_submit 主表（每次都新增，保留历史） ===
-        const [submitResult] = await pool.execute(
-            `INSERT INTO lead_submit (phone, submit_type, raw_payload, created_at) VALUES (?, ?, ?, NOW())`,
-            [phone, submitType || 0, JSON.stringify(body)]
-        ) as any;
-        const submitId = submitResult.insertId;
-
-        // === 2. 写入 lead_submit_field 子表 ===
-        await insertLeadSubmitFields(submitId, data);
-
         // === 3. 从 data[] 中提取结构化字段 ===
         const fieldMap = new Map(data.map((f: any) => [f.fieldKey || f.mark, f.value || f.showValue || '']));
         const name = (fieldMap.get('name') || '') as string;
@@ -277,49 +252,67 @@ api3.post('/zhan/xapp/submit', async (c) => {
         const tables = parseInt(String(fieldMap.get('tables') || '0'), 10) || 0;
         const store = (fieldMap.get('store') || '') as string;
         const remark = (fieldMap.get('remark') || '') as string;
+        const conn = await pool.getConnection();
+        let submitId = 0;
+        try {
+            await conn.beginTransaction();
 
-        // === 4. Upsert reservation（按手机号去重） ===
-        const [existing] = await pool.execute(
-            'SELECT id, submit_count FROM reservation WHERE mobile = ? LIMIT 1',
-            [phone]
-        ) as any;
+            // === 1. 写入 lead_submit 主表（每次都新增，保留历史） ===
+            const [submitResult] = await conn.execute(
+                `INSERT INTO lead_submit (phone, submit_type, raw_payload, created_at) VALUES (?, ?, ?, NOW())`,
+                [phone, submitType || 0, JSON.stringify(body)]
+            ) as any;
+            submitId = submitResult.insertId;
 
-        if (existing.length > 0) {
-            // 已存在 → 更新最新信息 + 自增 submit_count
-            const row = existing[0];
-            await pool.execute(
-                `UPDATE reservation SET
-                    name = ?, wedding_date = ?, tables_count = ?,
-                    remark = ?, submit_count = ?, updated_at = NOW()
-                 WHERE id = ?`,
-                [
-                    fullName || row.name,
-                    weddingDate || row.wedding_date,
-                    tables || row.tables_count,
-                    remark || row.remark,
-                    (row.submit_count || 1) + 1,
-                    row.id,
-                ]
-            );
-            console.log(`[API3] Updated reservation #${row.id}, submit_count=${(row.submit_count || 1) + 1}`);
-        } else {
-            // 不存在 → 新建 CRM 线索
-            // 尝试关联门店
+            // === 2. 写入 lead_submit_field 子表 ===
+            if (Array.isArray(data) && data.length > 0) {
+                const values = data.map((field: any, index: number) => [
+                    submitId,
+                    field.fieldKey || '',
+                    field.label || '',
+                    field.mark || '',
+                    field.mode || '',
+                    JSON.stringify(field.value ?? ''),
+                    field.showValue || '',
+                    index,
+                ]);
+                await conn.query(
+                    `INSERT INTO lead_submit_field (submit_id, field_key, label, mark, mode, value_json, show_value, sort_order)
+                     VALUES ?`,
+                    [values]
+                );
+            }
+
+            // === 4. Upsert reservation（按手机号原子去重） ===
             let venueId: number | null = null;
             if (store) {
-                const [venues] = await pool.execute(
+                const [venues] = await conn.execute(
                     'SELECT id FROM venue WHERE name LIKE ? AND is_active = 1 LIMIT 1',
                     [`%${store}%`]
                 ) as any;
                 if (venues.length > 0) venueId = venues[0].id;
             }
 
-            await pool.execute(
+            await conn.execute(
                 `INSERT INTO reservation (name, mobile, wedding_date, tables_count, venue_id, source, status, remark, submit_count, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, '小程序', '待跟进', ?, 1, NOW(), NOW())`,
+                 VALUES (?, ?, ?, ?, ?, '小程序', '待跟进', ?, 1, NOW(), NOW())
+                 ON DUPLICATE KEY UPDATE
+                    name = VALUES(name),
+                    wedding_date = VALUES(wedding_date),
+                    tables_count = VALUES(tables_count),
+                    venue_id = VALUES(venue_id),
+                    source = VALUES(source),
+                    submit_count = COALESCE(submit_count, 1) + 1,
+                    updated_at = NOW()`,
                 [fullName, phone, weddingDate, tables, venueId, remark]
             );
-            console.log(`[API3] Created new reservation for ${phone}`);
+
+            await conn.commit();
+        } catch (e) {
+            try { await conn.rollback(); } catch (_) {}
+            throw e;
+        } finally {
+            conn.release();
         }
 
         return c.json(ok({ submitId }));
@@ -332,6 +325,16 @@ api3.post('/zhan/xapp/submit', async (c) => {
 // ========================
 // 6. 其他杂项
 // ========================
-api3.post('/user/getPhoneNumber', (c) => c.json(ok({ phoneNumber: '13800138000', countryCode: '86' })));
+api3.post('/user/getPhoneNumber', (c) => {
+    if (process.env.ALLOW_MOCK_PHONE_NUMBER === '1') {
+        return c.json(ok({ phoneNumber: '13800138000', countryCode: '86' }));
+    }
+
+    return c.json({
+        errcode: 501,
+        errmsg: '未实现真实手机号解密，请改用 /api/wx/decrypt-phone 或显式开启 ALLOW_MOCK_PHONE_NUMBER=1',
+        data: {}
+    }, 501);
+});
 
 export default api3;

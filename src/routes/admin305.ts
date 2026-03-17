@@ -7,8 +7,34 @@
 import { Hono } from 'hono';
 import pool from '../db.js';
 import { processBulkUpload } from '../services/bulk-upload.service.js';
+import { forget, forgetByPrefix } from '../response-cache.js';
+import { adminAuthMiddleware } from '../middleware/admin-auth.js';
 
 const admin305 = new Hono();
+
+admin305.use('*', adminAuthMiddleware);
+
+function invalidateBrandCaches() {
+    forget('brand:v1');
+    forget('api3:brand:min');
+    forgetByPrefix('venues:v1:');
+}
+
+function invalidateCategoryCaches() {
+    forget('categories:v1');
+    forget('package_categories:v1');
+    forget('api3:classify:list');
+}
+
+function invalidatePageCaches(pageKey?: string) {
+    if (pageKey) forget(`page:v1:${pageKey}`);
+    else forgetByPrefix('page:v1:');
+}
+
+function invalidateLocationCaches() {
+    forget('cities:v1');
+    forgetByPrefix('venues:v1:');
+}
 
 // ============================================================
 // 品牌管理 (brand)
@@ -24,6 +50,7 @@ admin305.post('/brands', async (c) => {
         'INSERT INTO brand (name, logo_url, slogan, description, contact_phone, contact_wechat) VALUES (?, ?, ?, ?, ?, ?)',
         [name, logo_url || null, slogan || '', description || '', contact_phone || '', contact_wechat || '']
     ) as any;
+    invalidateBrandCaches();
     return c.json({ code: 0, data: { id: result.insertId } });
 });
 
@@ -44,11 +71,13 @@ admin305.put('/brands/:id', async (c) => {
 
     params.push(id);
     await pool.execute(`UPDATE brand SET ${sets.join(', ')} WHERE id = ?`, params);
+    invalidateBrandCaches();
     return c.json({ code: 0 });
 });
 
 admin305.delete('/brands/:id', async (c) => {
     await pool.execute('DELETE FROM brand WHERE id = ?', [c.req.param('id')]);
+    invalidateBrandCaches();
     return c.json({ code: 0 });
 });
 
@@ -66,6 +95,7 @@ admin305.post('/case-categories', async (c) => {
         'INSERT INTO case_category (name, sort_order) VALUES (?, ?)',
         [name, sort_order || 0]
     ) as any;
+    invalidateCategoryCaches();
     return c.json({ code: 0, data: { id: result.insertId } });
 });
 
@@ -75,11 +105,13 @@ admin305.put('/case-categories/:id', async (c) => {
         'UPDATE case_category SET name = ?, sort_order = ?, is_active = ? WHERE id = ?',
         [name, sort_order || 0, is_active ?? 1, c.req.param('id')]
     );
+    invalidateCategoryCaches();
     return c.json({ code: 0 });
 });
 
 admin305.delete('/case-categories/:id', async (c) => {
     await pool.execute('DELETE FROM case_category WHERE id = ?', [c.req.param('id')]);
+    invalidateCategoryCaches();
     return c.json({ code: 0 });
 });
 
@@ -97,6 +129,7 @@ admin305.post('/package-categories', async (c) => {
         'INSERT INTO package_category (name, slug, cover_url, sort_order) VALUES (?, ?, ?, ?)',
         [name, slug || null, cover_url || null, sort_order || 0]
     ) as any;
+    invalidateCategoryCaches();
     return c.json({ code: 0, data: { id: result.insertId } });
 });
 
@@ -116,11 +149,13 @@ admin305.put('/package-categories/:id', async (c) => {
 
     params.push(c.req.param('id'));
     await pool.execute(`UPDATE package_category SET ${sets.join(', ')} WHERE id = ?`, params);
+    invalidateCategoryCaches();
     return c.json({ code: 0 });
 });
 
 admin305.delete('/package-categories/:id', async (c) => {
     await pool.execute('DELETE FROM package_category WHERE id = ?', [c.req.param('id')]);
+    invalidateCategoryCaches();
     return c.json({ code: 0 });
 });
 
@@ -258,6 +293,7 @@ admin305.post('/pages', async (c) => {
          JSON.stringify(bottom_nav_json || {}), music_url || null]
     ) as any;
 
+    invalidatePageCaches(page_key);
     return c.json({ code: 0, data: { id: result.insertId } });
 });
 
@@ -285,6 +321,7 @@ admin305.put('/pages/:key', async (c) => {
 
     params.push(key);
     await pool.execute(`UPDATE page_config SET ${sets.join(', ')} WHERE page_key = ?`, params);
+    invalidatePageCaches(key);
     return c.json({ code: 0 });
 });
 
@@ -364,6 +401,7 @@ admin305.put('/venue/:id', async (c) => {
     if (sets.length === 0) return c.json({ code: 400, msg: 'No fields to update' });
     params.push(id);
     await pool.execute(`UPDATE venue SET ${sets.join(', ')} WHERE id = ?`, params);
+    invalidateLocationCaches();
     return c.json({ code: 0 });
 });
 
@@ -375,6 +413,7 @@ admin305.post('/venue', async (c) => {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [name, address || '', phone || '', city || '上海', brand_id || null, metro_info || '', description || '', cover_url || '']
     ) as any;
+    invalidateLocationCaches();
     return c.json({ code: 0, data: { id: res.insertId } });
 });
 
@@ -397,12 +436,14 @@ admin305.post('/venue-image', async (c) => {
         'INSERT INTO venue_image (venue_id, image_url, sort_order) VALUES (?, ?, ?)',
         [venue_id, image_url, sort_order || 0]
     ) as any;
+    invalidateLocationCaches();
     return c.json({ code: 0, data: { id: res.insertId } });
 });
 
 admin305.delete('/venue-image/:id', async (c) => {
     const id = c.req.param('id');
     await pool.execute('DELETE FROM venue_image WHERE id = ?', [id]);
+    invalidateLocationCaches();
     return c.json({ code: 0 });
 });
 
@@ -448,6 +489,7 @@ admin305.post('/venue-hall', async (c) => {
          VALUES (?, ?, ?, ?, ?, 1, 1, 0)`,
         [title || hall_name, hall_name, venue_id, description || '', cover_url || '']
     ) as any;
+    invalidateLocationCaches();
     return c.json({ code: 0, data: { id: res.insertId } });
 });
 
@@ -466,6 +508,7 @@ admin305.put('/venue-hall/:id', async (c) => {
     if (sets.length === 0) return c.json({ code: 400, msg: 'No fields to update' });
     params.push(id);
     await pool.execute(`UPDATE wedding_case SET ${sets.join(', ')} WHERE id = ?`, params);
+    invalidateLocationCaches();
     return c.json({ code: 0 });
 });
 
@@ -474,6 +517,7 @@ admin305.delete('/venue-hall/:id', async (c) => {
     // 同时删除关联图片
     await pool.execute('DELETE FROM case_image WHERE case_id = ?', [id]);
     await pool.execute('DELETE FROM wedding_case WHERE id = ? AND is_featured = 1', [id]);
+    invalidateLocationCaches();
     return c.json({ code: 0 });
 });
 
