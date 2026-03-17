@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pool from '../db.js';
@@ -9,6 +10,8 @@ const api3 = new Hono();
 
 // 数据目录
 const DATA_DIR = path.join(__dirname, '../api_dump');
+const apiDumpCache = new Map<string, any>();
+let dataDirFilesPromise: Promise<string[]> | null = null;
 
 // 统一成功响应包装
 const ok = (data: any = {}) => ({
@@ -35,6 +38,46 @@ function applyBranding(content: string): string {
     return result;
 }
 
+async function getDataDirFiles() {
+    if (!dataDirFilesPromise) {
+        dataDirFilesPromise = fsPromises.readdir(DATA_DIR);
+    }
+    return dataDirFilesPromise;
+}
+
+async function readApiDumpJson(fileName: string) {
+    if (apiDumpCache.has(fileName)) {
+        return apiDumpCache.get(fileName);
+    }
+
+    const filePath = path.join(DATA_DIR, fileName);
+    const raw = await fsPromises.readFile(filePath, 'utf8');
+    const parsed = JSON.parse(applyBranding(raw));
+    apiDumpCache.set(fileName, parsed);
+    return parsed;
+}
+
+async function insertLeadSubmitFields(submitId: number, data: any[]) {
+    if (!Array.isArray(data) || data.length === 0) return;
+
+    const values = data.map((field: any, index: number) => [
+        submitId,
+        field.fieldKey || '',
+        field.label || '',
+        field.mark || '',
+        field.mode || '',
+        JSON.stringify(field.value ?? ''),
+        field.showValue || '',
+        index,
+    ]);
+
+    await pool.query(
+        `INSERT INTO lead_submit_field (submit_id, field_key, label, mark, mode, value_json, show_value, sort_order)
+         VALUES ?`,
+        [values]
+    );
+}
+
 // ========================
 // 1. 获取页面配置 (Core)
 // ========================
@@ -46,34 +89,23 @@ api3.post('/zhan/xapp/page', async (c) => {
 
         // 定位文件
         let fileName = '';
+        const files = await getDataDirFiles();
         if (pageId) {
-            const files = fs.readdirSync(DATA_DIR);
             fileName = files.find(f => f.includes(`page_`) && f.includes(`_${pageId}.json`)) || '';
         }
         
         if (!fileName && hash) {
-            const files = fs.readdirSync(DATA_DIR);
             fileName = files.find(f => f.includes(`sub_`) && f.includes(`_${hash}.json`)) || '';
         }
 
         if (fileName) {
-            const jsonPath = path.join(DATA_DIR, fileName);
-            let rawData = fs.readFileSync(jsonPath, 'utf8');
-            
-            // 品牌动态替换
-            rawData = applyBranding(rawData);
-            
-            const data = JSON.parse(rawData);
-            return c.json(data);
+            return c.json(await readApiDumpJson(fileName));
         }
 
         // 回退首页
         console.warn(`[API3] Page not found (pageId=${pageId}, hash=${hash}), falling back to home`);
-        const homePath = path.join(DATA_DIR, 'page_home_3692202.json');
-        if (fs.existsSync(homePath)) {
-            let homeData = fs.readFileSync(homePath, 'utf8');
-            homeData = applyBranding(homeData);
-            return c.json(JSON.parse(homeData));
+        if (fs.existsSync(path.join(DATA_DIR, 'page_home_3692202.json'))) {
+            return c.json(await readApiDumpJson('page_home_3692202.json'));
         }
 
         return c.json(ok({ msg: 'no data' }), 404);
@@ -159,11 +191,8 @@ api3.post('/zhan/xapp/getContentPageClassifyData', async (c) => {
         }));
     } catch (e) {
         console.error('DB Fetch Error (Classify):', e);
-        const classifyPath = path.join(DATA_DIR, 'cms_classify.json');
-        if (fs.existsSync(classifyPath)) {
-            let content = fs.readFileSync(classifyPath, 'utf8');
-            content = applyBranding(content);
-            const data = JSON.parse(content);
+        if (fs.existsSync(path.join(DATA_DIR, 'cms_classify.json'))) {
+            const data = await readApiDumpJson('cms_classify.json');
             if (data.errcode === 0) return c.json(data);
         }
         return c.json(ok({ classifyList: [], total: 0 }));
@@ -197,11 +226,8 @@ api3.post('/zhan/xapp/getContentData', async (c) => {
         }));
     } catch (e) {
         console.error('DB Fetch Error (Content):', e);
-        const listPath = path.join(DATA_DIR, 'cms_list.json');
-        if (fs.existsSync(listPath)) {
-            let content = fs.readFileSync(listPath, 'utf8');
-            content = applyBranding(content);
-            const data = JSON.parse(content);
+        if (fs.existsSync(path.join(DATA_DIR, 'cms_list.json'))) {
+            const data = await readApiDumpJson('cms_list.json');
             if (data.errcode === 0) return c.json(data);
         }
         return c.json(ok({ list: [], total: 0 }));
@@ -240,23 +266,7 @@ api3.post('/zhan/xapp/submit', async (c) => {
         const submitId = submitResult.insertId;
 
         // === 2. 写入 lead_submit_field 子表 ===
-        for (let i = 0; i < data.length; i++) {
-            const field = data[i];
-            await pool.execute(
-                `INSERT INTO lead_submit_field (submit_id, field_key, label, mark, mode, value_json, show_value, sort_order)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    submitId,
-                    field.fieldKey || '',
-                    field.label || '',
-                    field.mark || '',
-                    field.mode || '',
-                    JSON.stringify(field.value ?? ''),
-                    field.showValue || '',
-                    i,
-                ]
-            );
-        }
+        await insertLeadSubmitFields(submitId, data);
 
         // === 3. 从 data[] 中提取结构化字段 ===
         const fieldMap = new Map(data.map((f: any) => [f.fieldKey || f.mark, f.value || f.showValue || '']));

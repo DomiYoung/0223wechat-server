@@ -339,6 +339,9 @@ export async function initDB() {
     try { await db.execute('ALTER TABLE wedding_case ADD COLUMN views INT DEFAULT 0 COMMENT \'浏览量\' AFTER content'); } catch (_) {}
     try { await db.execute('ALTER TABLE wedding_case ADD COLUMN likes INT DEFAULT 0 COMMENT \'点赞数\' AFTER views'); } catch (_) {}
     try { await db.execute('ALTER TABLE wedding_case ADD INDEX idx_category (category_id)'); } catch (_) {}
+    try { await db.execute('CREATE INDEX idx_active_sort_id ON wedding_case(is_active, sort_order, id)'); } catch (_) {}
+    try { await db.execute('CREATE INDEX idx_active_category ON wedding_case(is_active, category_id)'); } catch (_) {}
+    try { await db.execute('CREATE INDEX idx_venue_featured_active_sort ON wedding_case(venue_id, is_featured, is_active, sort_order, id)'); } catch (_) {}
 
     // ============================================================
     // 0305 扩展表：套餐分类（独立业务线，不关联品牌）
@@ -377,6 +380,7 @@ export async function initDB() {
             INDEX idx_sort (sort_order, id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='套餐'
     `);
+    try { await db.execute('CREATE INDEX idx_category_active_sort ON package(category_id, is_active, sort_order, id)'); } catch (_) {}
 
     // ============================================================
     // 0305 扩展表：套餐图集
@@ -409,6 +413,7 @@ export async function initDB() {
     // venue 扩展: 增加 metro_info / description
     try { await db.execute('ALTER TABLE venue ADD COLUMN metro_info VARCHAR(200) DEFAULT \'\' COMMENT \'地铁信息\' AFTER business_hours'); } catch (_) {}
     try { await db.execute('ALTER TABLE venue ADD COLUMN description TEXT COMMENT \'门店描述\' AFTER metro_info'); } catch (_) {}
+    try { await db.execute('CREATE INDEX idx_brand_active_id ON venue(brand_id, is_active, id)'); } catch (_) {}
 
     // ============================================================
     // 0305 扩展表：页面动态配置 (CMS可编辑)
@@ -576,29 +581,27 @@ async function migrateCityData(db: mysql.Pool) {
 
     if (allCityNames.size === 0) return; // 无需迁移
 
-    for (const name of allCityNames) {
-        await db.execute('INSERT IGNORE INTO city (name) VALUES (?)', [name]);
+    if (allCityNames.size > 0) {
+        const cityNames = Array.from(allCityNames);
+        const values = cityNames.map((name) => [name]);
+        await (db as any).query('INSERT IGNORE INTO city (name) VALUES ?', [values]);
     }
 
-    // 4. 读取完整城市映射
-    const [cityRows] = await db.execute('SELECT id, name FROM city') as any;
-    const cityMap = new Map(cityRows.map((r: any) => [r.name, r.id]));
+    // 4. 集合更新，避免按城市逐条回填
+    await db.execute(
+        `UPDATE venue v
+         INNER JOIN city c ON c.name = v.city
+         SET v.city_id = c.id
+         WHERE v.city != '' AND v.city_id IS NULL`
+    );
 
-    // 5. 回填 venue.city_id
-    for (const [name, id] of cityMap) {
-        await (db as any).execute(
-            'UPDATE venue SET city_id = ? WHERE city = ? AND city_id IS NULL',
-            [id, name]
-        );
-    }
-
-    // 6. 回填 reservation.city_id
-    for (const [name, id] of cityMap) {
-        await (db as any).execute(
-            'UPDATE reservation SET city_id = ? WHERE city = ? AND city_id IS NULL',
-            [id, name]
-        );
-    }
+    // 5. 集合更新，避免按城市逐条回填
+    await db.execute(
+        `UPDATE reservation r
+         INNER JOIN city c ON c.name = r.city
+         SET r.city_id = c.id
+         WHERE r.city != '' AND r.city_id IS NULL`
+    );
 
     const migratedCount = venueCities.length + resCities.length;
     if (migratedCount > 0) {

@@ -15,6 +15,27 @@ const mp = new Hono();
 const ok = (data: any = {}) => ({ errcode: 0, errmsg: 'success', data });
 const fail = (msg: string, code = 500) => ({ errcode: code, errmsg: msg, data: {} });
 
+async function insertLeadSubmitFields(submitId: number, fields: any[]) {
+  if (!Array.isArray(fields) || fields.length === 0) return;
+
+  const values = fields.map((item: any, index: number) => [
+    submitId,
+    item.fieldKey || item.name || '',
+    item.label || '',
+    item.mark || '',
+    String(item.mode || ''),
+    item.value !== undefined ? JSON.stringify(item.value) : null,
+    item.showValue || (typeof item.value === 'string' ? item.value : ''),
+    index,
+  ]);
+
+  await pool.query(
+    `INSERT INTO lead_submit_field (submit_id, field_key, label, mark, mode, value_json, show_value, sort_order)
+     VALUES ?`,
+    [values]
+  );
+}
+
 // ============================================================
 // categoryKey → categoryId 解析映射器
 // 前端发送 categoryKey (如 'birthday_case', 'business_package')
@@ -33,9 +54,18 @@ const CATEGORY_KEY_MAP: Record<string, { table: string; slug?: string; name?: st
   wedding_pkg:      { table: 'package_category', slug: 'wedding_pkg' },
 };
 
+const CATEGORY_ID_CACHE_TTL_MS = 10 * 60 * 1000;
+const categoryIdCache = new Map<string, { id: number | null; expiresAt: number }>();
+
 async function resolveCategoryId(categoryKey: string): Promise<number | null> {
+  const cached = categoryIdCache.get(categoryKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.id;
+
   const mapping = CATEGORY_KEY_MAP[categoryKey];
-  if (!mapping) return null;
+  if (!mapping) {
+    categoryIdCache.set(categoryKey, { id: null, expiresAt: Date.now() + CATEGORY_ID_CACHE_TTL_MS });
+    return null;
+  }
   
   let query = '';
   let param = '';
@@ -46,11 +76,14 @@ async function resolveCategoryId(categoryKey: string): Promise<number | null> {
     query = `SELECT id FROM ${mapping.table} WHERE name LIKE ? AND is_active = 1 LIMIT 1`;
     param = `%${mapping.name}%`;
   } else {
+    categoryIdCache.set(categoryKey, { id: null, expiresAt: Date.now() + CATEGORY_ID_CACHE_TTL_MS });
     return null;
   }
   
   const [rows] = await pool.execute(query, [param]) as any;
-  return rows.length > 0 ? rows[0].id : null;
+  const id = rows.length > 0 ? rows[0].id : null;
+  categoryIdCache.set(categoryKey, { id, expiresAt: Date.now() + CATEGORY_ID_CACHE_TTL_MS });
+  return id;
 }
 
 // ============================================================
@@ -94,9 +127,17 @@ mp.post('/page', async (c) => {
 mp.post('/categories', async (c) => {
     try {
         const [categories] = await pool.execute(
-            `SELECT cc.id, cc.name,
-                    (SELECT COUNT(*) FROM wedding_case wc WHERE wc.category_id = cc.id AND wc.is_active = 1) as count
+            `SELECT
+                cc.id,
+                cc.name,
+                COALESCE(cnt.total, 0) AS count
              FROM case_category cc
+             LEFT JOIN (
+                SELECT category_id, COUNT(*) AS total
+                FROM wedding_case
+                WHERE is_active = 1 AND category_id IS NOT NULL
+                GROUP BY category_id
+             ) cnt ON cnt.category_id = cc.id
              WHERE cc.is_active = 1
              ORDER BY cc.sort_order, cc.id`
         ) as any;
@@ -548,25 +589,7 @@ mp.post('/submit', async (c) => {
         const submitId = submitResult.insertId;
 
         // 2. 写入 lead_submit_field 子表
-        if (Array.isArray(fields) && fields.length > 0) {
-            for (let i = 0; i < fields.length; i++) {
-                const item = fields[i];
-                await pool.execute(
-                    `INSERT INTO lead_submit_field (submit_id, field_key, label, mark, mode, value_json, show_value, sort_order)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [
-                        submitId,
-                        item.fieldKey || item.name || '',
-                        item.label || '',
-                        item.mark || '',
-                        String(item.mode || ''),
-                        item.value !== undefined ? JSON.stringify(item.value) : null,
-                        item.showValue || (typeof item.value === 'string' ? item.value : ''),
-                        i
-                    ]
-                );
-            }
-        }
+        await insertLeadSubmitFields(submitId, fields);
 
         // 3. 同时写入 reservation (如果包含姓名和手机号)
         const nameField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'name' || f.mark === 'name') : null;

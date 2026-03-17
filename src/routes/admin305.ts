@@ -140,12 +140,26 @@ admin305.get('/packages', async (c) => {
 
     const [rows] = await pool.execute(sql, params) as any;
 
-    // 附带图集
-    for (const row of rows) {
+    // 附带图集（批量查询，避免 N+1）
+    if (rows.length > 0) {
+        const pkgIds = rows.map((r: any) => r.id);
+        const placeholders = pkgIds.map(() => '?').join(',');
         const [imgs] = await pool.execute(
-            'SELECT id, image_url, sort_order FROM package_image WHERE package_id = ? ORDER BY sort_order', [row.id]
+            `SELECT id, package_id, image_url, sort_order
+             FROM package_image
+             WHERE package_id IN (${placeholders})
+             ORDER BY package_id, sort_order`,
+            pkgIds
         ) as any;
-        row.images = imgs;
+
+        const imgMap = new Map<number, any[]>();
+        for (const img of imgs) {
+            if (!imgMap.has(img.package_id)) imgMap.set(img.package_id, []);
+            imgMap.get(img.package_id)!.push(img);
+        }
+        for (const row of rows) {
+            row.images = imgMap.get(row.id) || [];
+        }
     }
 
     return c.json({ code: 0, data: rows });
@@ -298,13 +312,39 @@ admin305.get('/venues', async (c) => {
     const [rows] = await pool.execute(
         `SELECT v.*, b.name AS brandName FROM venue v LEFT JOIN brand b ON v.brand_id = b.id ORDER BY v.id`
     ) as any;
-    // 附带每个门店的轮播图
-    for (const v of rows) {
-        const [imgs] = await pool.execute('SELECT id, image_url, sort_order FROM venue_image WHERE venue_id = ? ORDER BY sort_order', [v.id]) as any;
-        v.images = imgs;
-        // 附带宴会厅数量
-        const [hallCount] = await pool.execute('SELECT COUNT(*) as cnt FROM wedding_case WHERE venue_id = ? AND is_featured = 1', [v.id]) as any;
-        v.hallCount = hallCount[0].cnt;
+
+    // 附带每个门店的轮播图 + 宴会厅数量（批量查询，避免 N+1）
+    if (rows.length > 0) {
+        const venueIds = rows.map((v: any) => v.id);
+        const placeholders = venueIds.map(() => '?').join(',');
+
+        const [imgs] = await pool.execute(
+            `SELECT id, venue_id, image_url, sort_order
+             FROM venue_image
+             WHERE venue_id IN (${placeholders})
+             ORDER BY venue_id, sort_order`,
+            venueIds
+        ) as any;
+        const imgMap = new Map<number, any[]>();
+        for (const img of imgs) {
+            if (!imgMap.has(img.venue_id)) imgMap.set(img.venue_id, []);
+            imgMap.get(img.venue_id)!.push(img);
+        }
+
+        const [hallCounts] = await pool.execute(
+            `SELECT venue_id, COUNT(*) as cnt
+             FROM wedding_case
+             WHERE is_featured = 1 AND venue_id IN (${placeholders})
+             GROUP BY venue_id`,
+            venueIds
+        ) as any;
+        const hallCountMap = new Map<number, number>();
+        for (const r of hallCounts) hallCountMap.set(r.venue_id, Number(r.cnt || 0));
+
+        for (const v of rows) {
+            v.images = imgMap.get(v.id) || [];
+            v.hallCount = hallCountMap.get(v.id) || 0;
+        }
     }
     return c.json({ code: 0, data: { list: rows } });
 });
@@ -380,10 +420,21 @@ admin305.get('/venue-halls/:venueId', async (c) => {
          ORDER BY wc.sort_order, wc.id`,
         [venueId]
     ) as any;
-    // 附带每个厅的图片数
-    for (const h of rows) {
-        const [imgCount] = await pool.execute('SELECT COUNT(*) as cnt FROM case_image WHERE case_id = ?', [h.id]) as any;
-        h.imageCount = imgCount[0].cnt;
+
+    // 附带每个厅的图片数（批量查询，避免 N+1）
+    if (rows.length > 0) {
+        const hallIds = rows.map((h: any) => h.id);
+        const placeholders = hallIds.map(() => '?').join(',');
+        const [counts] = await pool.execute(
+            `SELECT case_id, COUNT(*) as cnt
+             FROM case_image
+             WHERE case_id IN (${placeholders})
+             GROUP BY case_id`,
+            hallIds
+        ) as any;
+        const countMap = new Map<number, number>();
+        for (const r of counts) countMap.set(r.case_id, Number(r.cnt || 0));
+        for (const h of rows) h.imageCount = countMap.get(h.id) || 0;
     }
     return c.json({ code: 0, data: { list: rows } });
 });
