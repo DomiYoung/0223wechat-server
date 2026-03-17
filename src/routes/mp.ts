@@ -340,13 +340,22 @@ mp.post('/venues', async (c) => {
             params
         ) as any;
 
-        // 附带每个门店的轮播图
-        for (const venue of list) {
-            const [imgs] = await pool.execute(
-                'SELECT image_url FROM venue_image WHERE venue_id = ? ORDER BY sort_order',
-                [venue.id]
+        // 批量查询所有门店的轮播图（避免 N+1）
+        const venueIds = list.map((v: any) => v.id);
+        if (venueIds.length > 0) {
+            const placeholders = venueIds.map(() => '?').join(',');
+            const [allImgs] = await pool.execute(
+                `SELECT venue_id, image_url FROM venue_image WHERE venue_id IN (${placeholders}) ORDER BY sort_order`,
+                venueIds
             ) as any;
-            venue.images = imgs.map((i: any) => i.image_url);
+            const imgMap = new Map<number, string[]>();
+            for (const img of allImgs) {
+                if (!imgMap.has(img.venue_id)) imgMap.set(img.venue_id, []);
+                imgMap.get(img.venue_id)!.push(img.image_url);
+            }
+            for (const venue of list) {
+                venue.images = imgMap.get(venue.id) || [];
+            }
         }
 
         return c.json(ok({ list }));
@@ -418,14 +427,26 @@ mp.post('/venue/halls', async (c) => {
             [venueId]
         ) as any;
 
-        // 附带每个厅的封面图（取第一张 case_image）
-        for (const hall of list) {
-            const [imgs] = await pool.execute(
-                'SELECT image_url FROM case_image WHERE case_id = ? ORDER BY sort_order LIMIT 1',
-                [hall.id]
+        // 批量查询封面图（避免 N+1）：没有 coverUrl 的厅用 case_image 第一张兜底
+        const hallsNeedCover = list.filter((h: any) => !h.coverUrl);
+        if (hallsNeedCover.length > 0) {
+            const hallIds = hallsNeedCover.map((h: any) => h.id);
+            const placeholders = hallIds.map(() => '?').join(',');
+            const [coverImgs] = await pool.execute(
+                `SELECT case_id, image_url FROM case_image 
+                 WHERE case_id IN (${placeholders}) 
+                 ORDER BY sort_order`,
+                hallIds
             ) as any;
-            if (imgs.length > 0 && !hall.coverUrl) {
-                hall.coverUrl = imgs[0].image_url;
+            // 取每个 case_id 的第一张图
+            const coverMap = new Map<number, string>();
+            for (const img of coverImgs) {
+                if (!coverMap.has(img.case_id)) {
+                    coverMap.set(img.case_id, img.image_url);
+                }
+            }
+            for (const hall of hallsNeedCover) {
+                hall.coverUrl = coverMap.get(hall.id) || '';
             }
         }
 
