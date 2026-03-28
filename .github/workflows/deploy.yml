@@ -65,6 +65,8 @@ jobs:
           echo "🗄️ 执行数据库迁移..."
           $SSH_CMD "cd $DEST_PATH && npx tsx scripts/db_migrate_core_constraints.ts 2>&1"
           $SSH_CMD "cd $DEST_PATH && npx tsx scripts/db_migrate_reservation_unique.ts 2>&1"
+          $SSH_CMD "cd $DEST_PATH && npx tsx scripts/db_migrate_error_log.ts 2>&1"
+          $SSH_CMD "cd $DEST_PATH && npx tsx scripts/db_migrate_message_task.ts 2>&1"
 
           # 5. 重启服务
           echo "🚀 重启服务..."
