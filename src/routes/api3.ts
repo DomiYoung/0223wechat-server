@@ -4,10 +4,12 @@ import fsPromises from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pool from '../db.js';
+import { appLogger } from '../logger.js';
 import { remember } from '../response-cache.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const api3 = new Hono();
+const log = appLogger.child({ module: 'api3-routes' });
 
 // 数据目录
 const DATA_DIR = path.join(__dirname, '../api_dump');
@@ -65,7 +67,7 @@ api3.post('/zhan/xapp/page', async (c) => {
     try {
         const body = await c.req.json().catch(() => ({}));
         const { pageId, hash } = body;
-        console.log(`[API3] Request Page: pageId=${pageId}, hash=${hash}`);
+        log.info({ pageId, hash }, 'api3 page requested');
 
         // 定位文件
         let fileName = '';
@@ -83,14 +85,14 @@ api3.post('/zhan/xapp/page', async (c) => {
         }
 
         // 回退首页
-        console.warn(`[API3] Page not found (pageId=${pageId}, hash=${hash}), falling back to home`);
+        log.warn({ pageId, hash }, 'api3 page not found, falling back to home');
         if (fs.existsSync(path.join(DATA_DIR, 'page_home_3692202.json'))) {
             return c.json(await readApiDumpJson('page_home_3692202.json'));
         }
 
         return c.json(ok({ msg: 'no data' }), 404);
     } catch (err: any) {
-        console.error('[API3] Page error:', err);
+        log.error({ err }, 'api3 page request failed');
         return c.json({ errcode: 500, errmsg: err.message }, 500);
     }
 });
@@ -175,7 +177,7 @@ api3.post('/zhan/xapp/getContentPageClassifyData', async (c) => {
             total: classifyList.length
         }));
     } catch (e) {
-        console.error('DB Fetch Error (Classify):', e);
+        log.error({ err: e }, 'api3 classify query failed');
         if (fs.existsSync(path.join(DATA_DIR, 'cms_classify.json'))) {
             const data = await readApiDumpJson('cms_classify.json');
             if (data.errcode === 0) return c.json(data);
@@ -210,7 +212,7 @@ api3.post('/zhan/xapp/getContentData', async (c) => {
             pageSize: 20
         }));
     } catch (e) {
-        console.error('DB Fetch Error (Content):', e);
+        log.error({ err: e }, 'api3 content query failed');
         if (fs.existsSync(path.join(DATA_DIR, 'cms_list.json'))) {
             const data = await readApiDumpJson('cms_list.json');
             if (data.errcode === 0) return c.json(data);
@@ -221,7 +223,7 @@ api3.post('/zhan/xapp/getContentData', async (c) => {
 
 api3.post('/zhan/xapp/getPageData', async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    console.log(`[API3] Request CMS Detail:`, body);
+    log.info({ body }, 'api3 cms detail requested');
     return c.json(ok({})); 
 });
 
@@ -233,7 +235,7 @@ api3.post('/zhan/xapp/submit', async (c) => {
         const body = await c.req.json().catch(() => ({}));
         const { phone, submitType, data } = body;
 
-        console.log('[API3] Submit lead:', { phone, submitType, fieldCount: data?.length });
+        log.info({ phone, submitType, fieldCount: data?.length }, 'api3 submit lead');
 
         // === 校验 ===
         if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
@@ -312,7 +314,7 @@ api3.post('/zhan/xapp/submit', async (c) => {
 
         return c.json(ok({ submitId }));
     } catch (err: any) {
-        console.error('[API3] Submit error:', err);
+        log.error({ err }, 'api3 submit failed');
         return c.json({ errcode: 500, errmsg: '提交失败，请稍后重试' }, 500);
     }
 });

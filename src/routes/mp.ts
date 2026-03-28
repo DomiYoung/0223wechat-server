@@ -6,11 +6,17 @@
  */
 import { Hono } from 'hono';
 import pool from '../db.js';
-import { sendFormSubmitNotification, sendNewLeadNotificationToAdmins } from '../services/wechat.service.js';
+import { appLogger } from '../logger.js';
+import {
+    enqueueAdminNewLeadNotificationTasks,
+    enqueueFormSubmitNotificationTask,
+    kickMessageTaskWorker,
+} from '../services/message-task.service.js';
 import { notifySalesNewLead } from '../services/sms.service.js';
 import { remember } from '../response-cache.js';
 
 const mp = new Hono();
+const log = appLogger.child({ module: 'mp-routes' });
 
 // 统一响应格式 (兼容原版 0305)
 const ok = (data: any = {}) => ({ errcode: 0, errmsg: 'success', data });
@@ -642,10 +648,12 @@ mp.post('/submit', async (c) => {
             conn.release();
         }
 
-        // 4. 发送订阅消息通知
+        // 4. 入队订阅消息任务
         if (openId && nameVal && phoneVal) {
             try {
-                await sendFormSubmitNotification(openId, {
+                await enqueueFormSubmitNotificationTask({
+                    openId,
+                    submitId,
                     name: nameVal,
                     phone: phoneVal,
                     store: storeField?.showValue || storeField?.value || '',
@@ -653,20 +661,21 @@ mp.post('/submit', async (c) => {
                 });
             } catch (notifyErr: any) {
                 // 通知失败不影响主流程，仅记录日志
-                console.error('[Submit] 发送订阅消息失败:', notifyErr.message);
+                log.error({ err: notifyErr }, 'mp submit user notification failed');
             }
         }
 
-        // 5. 发送新留资通知给管理员
+        // 5. 入队管理员订阅消息任务
         try {
-            await sendNewLeadNotificationToAdmins({
+            await enqueueAdminNewLeadNotificationTasks({
+                submitId,
                 name: nameVal,
                 phone: phoneVal,
                 store: storeField?.showValue || storeField?.value || '',
                 weddingDate: dateVal
             });
         } catch (adminNotifyErr: any) {
-            console.error('[Submit] 发送管理员通知失败:', adminNotifyErr.message);
+            log.error({ err: adminNotifyErr }, 'mp submit admin notification failed');
         }
 
         // 6. 发送短信通知给销售
@@ -678,8 +687,10 @@ mp.post('/submit', async (c) => {
                 weddingDate: dateVal
             });
         } catch (smsErr: any) {
-            console.error('[Submit] 发送短信通知失败:', smsErr.message);
+            log.error({ err: smsErr }, 'mp submit sms notification failed');
         }
+
+        kickMessageTaskWorker();
 
         return c.json(ok({ formId: String(submitId) }));
     } catch (err: any) {
@@ -730,10 +741,10 @@ mp.post('/subscribe/report', async (c) => {
             [values]
         );
 
-        console.log('[Subscribe] 记录用户订阅:', { openId, templateIds, bizType });
+        log.info({ openId, templateIds, bizType }, 'mp subscribe report saved');
         return c.json(ok({ message: '订阅记录成功' }));
     } catch (err: any) {
-        console.error('[Subscribe] 记录订阅失败:', err);
+        log.error({ err }, 'mp subscribe report failed');
         return c.json(fail(err.message));
     }
 });

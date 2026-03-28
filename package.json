@@ -5,8 +5,12 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "db:init": "tsx scripts/init-db.ts",
     "migrate:reservation-unique": "tsx scripts/db_migrate_reservation_unique.ts",
-    "migrate:core": "tsx scripts/db_migrate_core_constraints.ts"
+    "migrate:core": "tsx scripts/db_migrate_core_constraints.ts",
+    "migrate:error-log": "tsx scripts/db_migrate_error_log.ts",
+    "migrate:message-task": "tsx scripts/db_migrate_message_task.ts",
+    "migrate:all": "npm run migrate:reservation-unique && npm run migrate:core && npm run migrate:error-log && npm run migrate:message-task"
   },
   "dependencies": {
     "@alicloud/dysmsapi20170525": "^4.5.0",
@@ -19,7 +23,8 @@
     "form-data": "^4.0.5",
     "hono": "^4.12.1",
     "multer": "^2.1.1",
-    "mysql2": "^3.17.4"
+    "mysql2": "^3.17.4",
+    "pino": "^10.3.1"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",

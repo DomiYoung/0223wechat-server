@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { appLogger } from '../logger.js';
 
 type AdminTokenPayloadV1 = {
   v: 1;
@@ -12,6 +13,7 @@ type AdminTokenPayloadV1 = {
 
 let warnedAboutMissingSecret = false;
 let ephemeralSecret: string | null = null;
+const log = appLogger.child({ module: 'admin-auth' });
 
 function getTokenSecret(): string {
   const fromEnv = process.env.ADMIN_TOKEN_SECRET?.trim();
@@ -19,7 +21,7 @@ function getTokenSecret(): string {
 
   if (!warnedAboutMissingSecret) {
     warnedAboutMissingSecret = true;
-    console.warn('[SECURITY] ADMIN_TOKEN_SECRET is not set. Admin tokens will be invalid after process restart. Set a stable secret in production.');
+    log.warn('ADMIN_TOKEN_SECRET is not set; admin tokens will become invalid after process restart');
   }
 
   if (!ephemeralSecret) ephemeralSecret = crypto.randomBytes(32).toString('hex');
@@ -204,4 +206,3 @@ export async function verifyAdminPassword(password: string, storedHash: string):
   if (storedHash === password) return { ok: true, needsUpgrade: true };
   return { ok: false, needsUpgrade: false };
 }
-

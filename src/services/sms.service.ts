@@ -7,6 +7,9 @@
  */
 import Dysmsapi20170525 from '@alicloud/dysmsapi20170525';
 import OpenApi from '@alicloud/openapi-client';
+import { appLogger } from '../logger.js';
+
+const log = appLogger.child({ module: 'sms-service' });
 
 /**
  * 初始化短信客户端
@@ -59,20 +62,20 @@ async function sendSMS(
     }
 
     if (response.body.code === 'OK') {
-      console.log('[SMS] 短信发送成功:', {
+      log.info({
         phone: phoneNumbers,
         bizId: response.body.bizId
-      });
+      }, 'sms sent');
 
       // 记录成功日志到数据库
       await logSMS(phoneNumbers, templateCode, templateParam, response.body.bizId || null, 'success', null);
 
       return true;
     } else {
-      console.error('[SMS] 短信发送失败:', {
+      log.error({
         code: response.body.code,
         message: response.body.message
-      });
+      }, 'sms send failed');
 
       // 记录失败日志到数据库
       await logSMS(phoneNumbers, templateCode, templateParam, null, 'failed', `${response.body.code}: ${response.body.message}`);
@@ -80,7 +83,7 @@ async function sendSMS(
       return false;
     }
   } catch (err: any) {
-    console.error('[SMS] 短信发送异常:', err.message);
+    log.error({ err, phoneNumbers, templateCode }, 'sms send exception');
 
     // 记录异常日志到数据库
     await logSMS(phoneNumbers, templateCode, templateParam, null, 'failed', err.message);
@@ -110,7 +113,7 @@ async function logSMS(
     );
   } catch (err: any) {
     // 日志记录失败不影响主流程
-    console.error('[SMS] 日志记录失败:', err.message);
+    log.error({ err, phone, templateCode }, 'sms log persistence failed');
   }
 }
 
@@ -130,7 +133,7 @@ export async function notifySalesNewLead(leadData: {
   const salesPhones = process.env.SALES_PHONES?.split(',').map(p => p.trim()).filter(Boolean) || [];
 
   if (salesPhones.length === 0) {
-    console.warn('[SMS] 未配置销售手机号 SALES_PHONES');
+    log.warn('sales phone list is not configured');
     return;
   }
 
@@ -150,7 +153,7 @@ export async function notifySalesNewLead(leadData: {
   const success = await sendSMS(phoneNumbers, templateCode, templateParam);
 
   if (success) {
-    console.log(`[SMS] 已通知 ${salesPhones.length} 位销售`);
+    log.info({ salesCount: salesPhones.length }, 'sales notified by sms');
   }
 
   return success;

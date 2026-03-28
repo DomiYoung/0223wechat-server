@@ -7,10 +7,12 @@
 import { Hono } from 'hono';
 import pool from '../db.js';
 import { processBulkUpload } from '../services/bulk-upload.service.js';
+import { appLogger } from '../logger.js';
 import { forget, forgetByPrefix } from '../response-cache.js';
 import { adminAuthMiddleware } from '../middleware/admin-auth.js';
 
 const admin305 = new Hono();
+const log = appLogger.child({ module: 'admin305-routes' });
 
 admin305.use('*', adminAuthMiddleware);
 
@@ -76,7 +78,19 @@ admin305.put('/brands/:id', async (c) => {
 });
 
 admin305.delete('/brands/:id', async (c) => {
-    await pool.execute('DELETE FROM brand WHERE id = ?', [c.req.param('id')]);
+    const id = c.req.param('id');
+    const conn = await pool.getConnection();
+    try {
+        await conn.beginTransaction();
+        await conn.execute('UPDATE venue SET brand_id = NULL WHERE brand_id = ?', [id]);
+        await conn.execute('DELETE FROM brand WHERE id = ?', [id]);
+        await conn.commit();
+    } catch (err) {
+        try { await conn.rollback(); } catch (_) {}
+        throw err;
+    } finally {
+        conn.release();
+    }
     invalidateBrandCaches();
     return c.json({ code: 0 });
 });
@@ -110,7 +124,19 @@ admin305.put('/case-categories/:id', async (c) => {
 });
 
 admin305.delete('/case-categories/:id', async (c) => {
-    await pool.execute('DELETE FROM case_category WHERE id = ?', [c.req.param('id')]);
+    const id = c.req.param('id');
+    const conn = await pool.getConnection();
+    try {
+        await conn.beginTransaction();
+        await conn.execute('UPDATE wedding_case SET category_id = NULL WHERE category_id = ?', [id]);
+        await conn.execute('DELETE FROM case_category WHERE id = ?', [id]);
+        await conn.commit();
+    } catch (err) {
+        try { await conn.rollback(); } catch (_) {}
+        throw err;
+    } finally {
+        conn.release();
+    }
     invalidateCategoryCaches();
     return c.json({ code: 0 });
 });
@@ -154,7 +180,25 @@ admin305.put('/package-categories/:id', async (c) => {
 });
 
 admin305.delete('/package-categories/:id', async (c) => {
-    await pool.execute('DELETE FROM package_category WHERE id = ?', [c.req.param('id')]);
+    const id = c.req.param('id');
+    const conn = await pool.getConnection();
+    try {
+        await conn.beginTransaction();
+        const [pkgRows] = await conn.execute('SELECT id FROM package WHERE category_id = ?', [id]) as any;
+        const packageIds = pkgRows.map((row: any) => row.id);
+        if (packageIds.length > 0) {
+            const placeholders = packageIds.map(() => '?').join(',');
+            await conn.execute(`DELETE FROM package_image WHERE package_id IN (${placeholders})`, packageIds);
+            await conn.execute(`DELETE FROM package WHERE id IN (${placeholders})`, packageIds);
+        }
+        await conn.execute('DELETE FROM package_category WHERE id = ?', [id]);
+        await conn.commit();
+    } catch (err) {
+        try { await conn.rollback(); } catch (_) {}
+        throw err;
+    } finally {
+        conn.release();
+    }
     invalidateCategoryCaches();
     return c.json({ code: 0 });
 });
@@ -260,7 +304,19 @@ admin305.put('/packages/:id', async (c) => {
 });
 
 admin305.delete('/packages/:id', async (c) => {
-    await pool.execute('DELETE FROM package WHERE id = ?', [c.req.param('id')]);
+    const id = c.req.param('id');
+    const conn = await pool.getConnection();
+    try {
+        await conn.beginTransaction();
+        await conn.execute('DELETE FROM package_image WHERE package_id = ?', [id]);
+        await conn.execute('DELETE FROM package WHERE id = ?', [id]);
+        await conn.commit();
+    } catch (err) {
+        try { await conn.rollback(); } catch (_) {}
+        throw err;
+    } finally {
+        conn.release();
+    }
     return c.json({ code: 0 });
 });
 
@@ -386,7 +442,7 @@ admin305.get('/venues', async (c) => {
     return c.json({ code: 0, data: { list: rows } });
 });
 
-admin305.put('/venue/:id', async (c) => {
+admin305.put('/venues/:id', async (c) => {
     const id = c.req.param('id');
     const body = await c.req.json();
     const allowed = ['name', 'address', 'phone', 'city', 'lat', 'lng', 'business_hours', 'metro_info', 'description', 'cover_url', 'is_active', 'brand_id'];
@@ -405,7 +461,7 @@ admin305.put('/venue/:id', async (c) => {
     return c.json({ code: 0 });
 });
 
-admin305.post('/venue', async (c) => {
+admin305.post('/venues', async (c) => {
     const body = await c.req.json();
     const { name, address, phone, city, brand_id, metro_info, description, cover_url } = body;
     const [res] = await pool.execute(
@@ -429,7 +485,7 @@ admin305.get('/venue-images/:venueId', async (c) => {
     return c.json({ code: 0, data: { list: rows } });
 });
 
-admin305.post('/venue-image', async (c) => {
+admin305.post('/venue-images', async (c) => {
     const { venue_id, image_url, sort_order } = await c.req.json();
     if (!venue_id || !image_url) return c.json({ code: 400, msg: 'venue_id and image_url required' });
     const [res] = await pool.execute(
@@ -440,7 +496,7 @@ admin305.post('/venue-image', async (c) => {
     return c.json({ code: 0, data: { id: res.insertId } });
 });
 
-admin305.delete('/venue-image/:id', async (c) => {
+admin305.delete('/venue-images/:id', async (c) => {
     const id = c.req.param('id');
     await pool.execute('DELETE FROM venue_image WHERE id = ?', [id]);
     invalidateLocationCaches();
@@ -480,7 +536,7 @@ admin305.get('/venue-halls/:venueId', async (c) => {
     return c.json({ code: 0, data: { list: rows } });
 });
 
-admin305.post('/venue-hall', async (c) => {
+admin305.post('/venue-halls', async (c) => {
     const body = await c.req.json();
     const { title, hall_name, venue_id, description, cover_url } = body;
     if (!venue_id || !hall_name) return c.json({ code: 400, msg: 'venue_id and hall_name required' });
@@ -493,7 +549,7 @@ admin305.post('/venue-hall', async (c) => {
     return c.json({ code: 0, data: { id: res.insertId } });
 });
 
-admin305.put('/venue-hall/:id', async (c) => {
+admin305.put('/venue-halls/:id', async (c) => {
     const id = c.req.param('id');
     const body = await c.req.json();
     const allowed = ['title', 'hall_name', 'description', 'cover_url', 'is_active', 'sort_order', 'venue_id'];
@@ -512,11 +568,21 @@ admin305.put('/venue-hall/:id', async (c) => {
     return c.json({ code: 0 });
 });
 
-admin305.delete('/venue-hall/:id', async (c) => {
+admin305.delete('/venue-halls/:id', async (c) => {
     const id = c.req.param('id');
-    // 同时删除关联图片
-    await pool.execute('DELETE FROM case_image WHERE case_id = ?', [id]);
-    await pool.execute('DELETE FROM wedding_case WHERE id = ? AND is_featured = 1', [id]);
+    const conn = await pool.getConnection();
+    try {
+        await conn.beginTransaction();
+        await conn.execute('DELETE FROM case_image WHERE case_id = ?', [id]);
+        await conn.execute('UPDATE reservation SET case_id = NULL WHERE case_id = ?', [id]);
+        await conn.execute('DELETE FROM wedding_case WHERE id = ? AND is_featured = 1', [id]);
+        await conn.commit();
+    } catch (err) {
+        try { await conn.rollback(); } catch (_) {}
+        throw err;
+    } finally {
+        conn.release();
+    }
     invalidateLocationCaches();
     return c.json({ code: 0 });
 });
@@ -543,7 +609,7 @@ admin305.post('/bulk-upload', async (c) => {
 
         return c.json({ code: 0, data: { report } });
     } catch (err: any) {
-        console.error('[Admin305] bulk upload failed:', err);
+        log.error({ err }, 'admin bulk upload failed');
         return c.json({ error: err.message }, 500);
     }
 });
@@ -709,6 +775,7 @@ admin305.get('/sms-logs/:id', async (c) => {
     try {
         const id = c.req.param('id');
 
+
         const [rows] = await pool.execute(
             'SELECT * FROM sms_log WHERE id = ?',
             [id]
@@ -719,6 +786,199 @@ admin305.get('/sms-logs/:id', async (c) => {
         }
 
         return c.json({ code: 0, data: rows[0] });
+    } catch (err: any) {
+        return c.json({ code: 1, message: err.message }, 500);
+    }
+});
+
+// ============================================================
+// 原始提交记录管理 (lead_submit + lead_submit_field)
+// ============================================================
+
+/**
+ * 查询提交记录列表
+ * GET /api/admin/lead-submits?page=1&pageSize=20&phone=139
+ */
+admin305.get('/lead-submits', async (c) => {
+    try {
+        const page = parseInt(c.req.query('page') || '1');
+        const limit = parseInt(c.req.query('pageSize') || '20');
+        const phone = c.req.query('phone') || '';
+        const offset = (page - 1) * limit;
+
+        const conditions: string[] = [];
+        const params: any[] = [];
+
+        if (phone) {
+            conditions.push('ls.phone LIKE ?');
+            params.push(`%${phone}%`);
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        const [countRows] = await pool.execute(
+            `SELECT COUNT(*) as total FROM lead_submit ls ${whereClause}`,
+            params
+        ) as any;
+        const total = countRows[0].total;
+
+        const [rows] = await pool.execute(
+            `SELECT ls.id, ls.phone, ls.submit_type, ls.form_id, ls.page_id,
+                    ls.open_id, ls.created_at,
+                    (SELECT COUNT(*) FROM lead_submit_field WHERE submit_id = ls.id) AS field_count,
+                    r.id AS reservation_id, r.status AS reservation_status
+             FROM lead_submit ls
+             LEFT JOIN reservation r ON r.mobile = ls.phone
+             ${whereClause}
+             ORDER BY ls.created_at DESC
+             LIMIT ? OFFSET ?`,
+            [...params, limit, offset]
+        ) as any;
+
+        return c.json({
+            code: 0,
+            data: {
+                list: rows,
+                total,
+                page,
+                pageSize: limit,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
+    } catch (err: any) {
+        return c.json({ code: 1, message: err.message }, 500);
+    }
+});
+
+/**
+ * 查询单条提交详情（含字段明细）
+ * GET /api/admin/lead-submits/:id
+ */
+admin305.get('/lead-submits/:id', async (c) => {
+    try {
+        const id = c.req.param('id');
+
+        const [submitRows] = await pool.execute(
+            `SELECT ls.*, r.id AS reservation_id, r.name AS reservation_name,
+                    r.status AS reservation_status
+             FROM lead_submit ls
+             LEFT JOIN reservation r ON r.mobile = ls.phone
+             WHERE ls.id = ?`,
+            [id]
+        ) as any;
+
+        if (submitRows.length === 0) {
+            return c.json({ code: 404, message: '记录不存在' }, 404);
+        }
+
+        const [fields] = await pool.execute(
+            `SELECT field_key, label, mark, mode, value_json, show_value, sort_order
+             FROM lead_submit_field
+             WHERE submit_id = ?
+             ORDER BY sort_order ASC`,
+            [id]
+        ) as any;
+
+        return c.json({
+            code: 0,
+            data: {
+                submit: submitRows[0],
+                fields: fields.map((f: any) => ({
+                    ...f,
+                    value: f.value_json ? JSON.parse(f.value_json) : null,
+                })),
+            }
+        });
+    } catch (err: any) {
+        return c.json({ code: 1, message: err.message }, 500);
+    }
+});
+
+// ============================================================
+// 数据仪表盘统计
+// ============================================================
+
+/**
+ * 获取仪表盘统计数据
+ * GET /api/admin/dashboard/stats
+ */
+admin305.get('/dashboard/stats', async (c) => {
+    try {
+        // 今日/本周/本月客资统计
+        const [periodStats] = await pool.execute(`
+            SELECT
+                SUM(CASE WHEN DATE(created_at) = CURDATE() THEN 1 ELSE 0 END) AS today_leads,
+                SUM(CASE WHEN created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) THEN 1 ELSE 0 END) AS week_leads,
+                SUM(CASE WHEN MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE()) THEN 1 ELSE 0 END) AS month_leads
+            FROM reservation
+        `) as any;
+
+        // 今日短信
+        const [smsStats] = await pool.execute(`
+            SELECT COUNT(*) AS today_sms
+            FROM sms_log
+            WHERE DATE(created_at) = CURDATE()
+        `) as any;
+
+        // 状态分布
+        const [statusDist] = await pool.execute(`
+            SELECT status, COUNT(*) AS count
+            FROM reservation
+            GROUP BY status
+            ORDER BY count DESC
+        `) as any;
+
+        // 最近7天趋势
+        const [dailyTrend] = await pool.execute(`
+            SELECT DATE(created_at) AS date, COUNT(*) AS count
+            FROM reservation
+            WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+            GROUP BY DATE(created_at)
+            ORDER BY date ASC
+        `) as any;
+
+        // 最新5条待跟进
+        const [latestPending] = await pool.execute(`
+            SELECT id, name, mobile, source, created_at
+            FROM reservation
+            WHERE status = '待跟进'
+            ORDER BY created_at DESC
+            LIMIT 5
+        `) as any;
+
+        // 总数统计
+        const [totals] = await pool.execute(`
+            SELECT
+                (SELECT COUNT(*) FROM venue WHERE is_active = 1) AS venue_count,
+                (SELECT COUNT(*) FROM wedding_case WHERE is_active = 1) AS case_count,
+                (SELECT COUNT(*) FROM package WHERE is_active = 1) AS package_count,
+                (SELECT COUNT(*) FROM wx_user) AS wx_user_count
+        `) as any;
+
+        const period = periodStats[0] || {};
+        const sms = smsStats[0] || {};
+        const total = totals[0] || {};
+
+        return c.json({
+            code: 0,
+            data: {
+                today: {
+                    leads: Number(period.today_leads || 0),
+                    sms: Number(sms.today_sms || 0),
+                },
+                thisWeek: { leads: Number(period.week_leads || 0) },
+                thisMonth: { leads: Number(period.month_leads || 0) },
+                totals: {
+                    venues: Number(total.venue_count || 0),
+                    cases: Number(total.case_count || 0),
+                    packages: Number(total.package_count || 0),
+                    wxUsers: Number(total.wx_user_count || 0),
+                },
+                statusDistribution: statusDist,
+                dailyTrend: dailyTrend,
+                latestPending: latestPending,
+            }
+        });
     } catch (err: any) {
         return c.json({ code: 1, message: err.message }, 500);
     }

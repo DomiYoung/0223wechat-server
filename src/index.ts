@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { logger } from 'hono/logger';
-import pool, { ensureCoreForeignKeys, ensureReservationMobileUnique, ensureUserSubscribeUniqueByBizType, initDB } from './db.js';
+import pool from './db.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -11,20 +10,23 @@ import { queryThemes, toPublicTheme, toPublicThemeDetail, toAdminTheme } from '.
 import mpRoutes from './routes/mp.js';
 import admin305Routes from './routes/admin305.js';
 import api3Routes from './routes/api3.js';
+import { startMessageTaskWorker } from './services/message-task.service.js';
 import { forget, forgetByPrefix } from './response-cache.js';
 import { adminAuthMiddleware } from './middleware/admin-auth.js';
 import { hashAdminPassword, issueAdminToken, verifyAdminPassword } from './security/admin-auth.js';
 import { getWechatConfig } from './services/wechat-config.js';
+import { appLogger, requestLogger } from './logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = new Hono();
+const log = appLogger.child({ module: 'index' });
 
 function invalidateCityCaches() {
     forget('cities:v1');
     forgetByPrefix('venues:v1:');
 }
 
-app.use('*', logger());
+app.use('*', requestLogger);
 
 const corsAllowedOrigins = new Set(
     [
@@ -94,7 +96,7 @@ const uploadDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 app.onError((err, c) => {
-    console.error(`[GLOBAL ERROR] ${c.req.method} ${c.req.url}:`, err);
+    log.error({ err, method: c.req.method, url: c.req.url }, 'global error');
     return c.json({ errcode: 500, errmsg: err.message }, 500);
 });
 
@@ -378,7 +380,7 @@ app.post('/api/wx/login', async (c) => {
         const data = await res.json() as any;
 
         if (data.errcode) {
-            console.error('微信登录失败:', data);
+            log.error({ data }, 'wechat login failed');
             return c.json({ error: data.errmsg || '微信登录失败' }, 400);
         }
 
@@ -390,7 +392,7 @@ app.post('/api/wx/login', async (c) => {
             }
         });
     } catch (err: any) {
-        console.error('微信登录异常:', err);
+        log.error({ err }, 'wechat login exception');
         return c.json({ error: err.message }, 500);
     }
 });
@@ -424,7 +426,7 @@ app.post('/api/wx/decrypt-phone', async (c) => {
         // 验证 appId
         const { appId } = getWechatConfig();
         if (phoneInfo.watermark?.appid !== appId) {
-            console.warn('AppId 不匹配:', phoneInfo.watermark?.appid, '!=', appId);
+            log.warn({ actualAppId: phoneInfo.watermark?.appid, expectedAppId: appId }, 'wechat appId mismatch');
         }
 
         return c.json({
@@ -436,7 +438,7 @@ app.post('/api/wx/decrypt-phone', async (c) => {
             }
         });
     } catch (err: any) {
-        console.error('手机号解密失败:', err);
+        log.error({ err }, 'decrypt phone failed');
         return c.json({ error: '解密失败: ' + err.message }, 500);
     }
 });
@@ -565,7 +567,18 @@ app.delete('/api/admin/cities/:id', authMiddleware, async (c) => {
         if (venues[0].count > 0) {
             return c.json({ error: `该城市下有 ${venues[0].count} 个门店，无法删除` }, 400);
         }
-        await pool.execute('DELETE FROM city WHERE id = ?', [id]);
+        const conn = await pool.getConnection();
+        try {
+            await conn.beginTransaction();
+            await conn.execute('UPDATE reservation SET city_id = NULL WHERE city_id = ?', [id]);
+            await conn.execute('DELETE FROM city WHERE id = ?', [id]);
+            await conn.commit();
+        } catch (err) {
+            try { await conn.rollback(); } catch (_) {}
+            throw err;
+        } finally {
+            conn.release();
+        }
         invalidateCityCaches();
         return c.json({ code: 0 });
     } catch (err: any) {
@@ -694,7 +707,21 @@ app.put('/api/admin/venues/:id', authMiddleware, async (c) => {
 // 删除门店
 app.delete('/api/admin/venues/:id', authMiddleware, async (c) => {
     try {
-        await pool.execute('DELETE FROM venue WHERE id = ?', [c.req.param('id')]);
+        const id = c.req.param('id');
+        const conn = await pool.getConnection();
+        try {
+            await conn.beginTransaction();
+            await conn.execute('DELETE FROM venue_image WHERE venue_id = ?', [id]);
+            await conn.execute('UPDATE wedding_case SET venue_id = NULL WHERE venue_id = ?', [id]);
+            await conn.execute('UPDATE reservation SET venue_id = NULL WHERE venue_id = ?', [id]);
+            await conn.execute('DELETE FROM venue WHERE id = ?', [id]);
+            await conn.commit();
+        } catch (err) {
+            try { await conn.rollback(); } catch (_) {}
+            throw err;
+        } finally {
+            conn.release();
+        }
         return c.json({ code: 0 });
     } catch (err: any) {
         return c.json({ error: err.message }, 500);
@@ -796,7 +823,7 @@ app.put('/api/admin/themes/:id', authMiddleware, async (c) => {
             [title, tag || '', hallName, hallName, wedding_date || '', shop_label || '', description || '', cover_url || '', venue_id || null, sort_order || 0, is_featured || 0, is_active ?? 1, id]
         );
 
-        // 更新图片：先删后插（事务安全由外键 CASCADE 保证）
+        // 更新图片：先删后插
         if (images && Array.isArray(images)) {
             await pool.execute('DELETE FROM case_image WHERE case_id = ?', [id]);
             await insertCaseImagesBulk(id, images);
@@ -808,10 +835,23 @@ app.put('/api/admin/themes/:id', authMiddleware, async (c) => {
     }
 });
 
-// 删除主题（图片由外键 CASCADE 自动删除）
+// 删除主题（应用层手动清理关联数据）
 app.delete('/api/admin/themes/:id', authMiddleware, async (c) => {
     try {
-        await pool.execute('DELETE FROM wedding_case WHERE id = ?', [c.req.param('id')]);
+        const id = c.req.param('id');
+        const conn = await pool.getConnection();
+        try {
+            await conn.beginTransaction();
+            await conn.execute('DELETE FROM case_image WHERE case_id = ?', [id]);
+            await conn.execute('UPDATE reservation SET case_id = NULL WHERE case_id = ?', [id]);
+            await conn.execute('DELETE FROM wedding_case WHERE id = ?', [id]);
+            await conn.commit();
+        } catch (err) {
+            try { await conn.rollback(); } catch (_) {}
+            throw err;
+        } finally {
+            conn.release();
+        }
         return c.json({ code: 0 });
     } catch (err: any) {
         return c.json({ error: err.message }, 500);
@@ -1282,7 +1322,7 @@ app.post('/api3/zhan/xapp/savePhoneData', async (c) => {
         );
         return c.json(weimobOk());
     } catch (err: any) {
-        console.error('savePhoneData Error:', err);
+        log.error({ err }, 'savePhoneData error');
         return c.json({ errcode: 500, errmsg: err.message, data: {} });
     }
 });
@@ -1336,7 +1376,7 @@ app.post('/api3/zhan/xapp/submit', async (c) => {
 
         return c.json(weimobOk());
     } catch (err: any) {
-        console.error('submit Error:', err);
+        log.error({ err }, 'submit error');
         return c.json({ errcode: 500, errmsg: err.message, data: {} });
     }
 });
@@ -1412,7 +1452,7 @@ app.post('/api3/zhan/xapp/form/list', async (c) => {
             pageSize
         }));
     } catch (err: any) {
-        console.error('form list error:', err);
+        log.error({ err }, 'form list error');
         return c.json({ errcode: 500, errmsg: err.message, data: {} });
     }
 });
@@ -1456,7 +1496,7 @@ app.post('/api3/zhan/xapp/form/detail', async (c) => {
             data: dataArray
         }));
     } catch (err: any) {
-        console.error('form detail error:', err);
+        log.error({ err }, 'form detail error');
         return c.json({ errcode: 500, errmsg: err.message, data: {} });
     }
 });
@@ -1472,27 +1512,27 @@ app.post('/api/upload', authMiddleware, async (c) => {
         const ip = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || '';
         const body = await c.req.parseBody();
         const file = body['file'];
-        console.log(`[UPLOAD][${traceId}] receive request ip="${ip}" ua="${userAgent}" fields=${Object.keys(body).join(',')}`);
+        log.info({ traceId, ip, userAgent, fields: Object.keys(body) }, 'upload request received');
         if (!file || typeof file === 'string' || typeof (file as any).arrayBuffer !== 'function') {
-            console.warn(`[UPLOAD][${traceId}] missing file field or invalid file payload`);
+            log.warn({ traceId }, 'upload missing file field or invalid payload');
             return c.json({ error: '请选择文件' }, 400);
         }
-        console.log(`[UPLOAD][${traceId}] file name="${file.name}" type="${file.type || 'unknown'}" size=${file.size}`);
+        log.info({ traceId, fileName: file.name, mimeType: file.type || 'unknown', size: file.size }, 'upload file metadata');
         if (file.size <= 0) {
-            console.warn(`[UPLOAD][${traceId}] file.size=0, possible macOS iCloud placeholder or incomplete sync`);
+            log.warn({ traceId, fileName: file.name }, 'upload file size is zero');
             return c.json({ error: '上传文件为空（0B），请重新选择图片' }, 400);
         }
         if (file.size > maxUploadSizeBytes) {
-            console.warn(`[UPLOAD][${traceId}] file too large size=${file.size} limit=${maxUploadSizeBytes}`);
+            log.warn({ traceId, size: file.size, limit: maxUploadSizeBytes }, 'upload file too large');
             return c.json({ error: `文件大小不能超过 ${Math.floor(maxUploadSizeBytes / 1024 / 1024)}MB` }, 400);
         }
 
         const ext = path.extname(file.name) || '.jpg';
         const fileName = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
         const buffer = Buffer.from(await file.arrayBuffer());
-        console.log(`[UPLOAD][${traceId}] buffer.length=${buffer.length}`);
+        log.info({ traceId, bufferLength: buffer.length }, 'upload buffer ready');
         if (buffer.length <= 0) {
-            console.warn(`[UPLOAD][${traceId}] buffer.length=0 after arrayBuffer(), possible local file read issue`);
+            log.warn({ traceId, fileName: file.name }, 'upload buffer length is zero');
             return c.json({ error: '读取上传文件失败（0B），请重试' }, 400);
         }
 
@@ -1503,15 +1543,15 @@ app.post('/api/upload', authMiddleware, async (c) => {
             },
         });
         if (!result?.url) {
-            console.error(`[UPLOAD][${traceId}] oss put success but url missing for object="${fileName}"`);
+            log.error({ traceId, objectName: fileName }, 'upload succeeded but oss url missing');
             return c.json({ error: '上传成功但未获取到文件地址' }, 500);
         }
         const secureUrl = result.url.replace('http://', 'https://');
-        console.log(`[UPLOAD][${traceId}] success object="${fileName}" url="${secureUrl}"`);
+        log.info({ traceId, objectName: fileName, url: secureUrl }, 'upload completed');
 
         return c.json({ code: 0, data: { url: secureUrl } });
     } catch (err: any) {
-        console.error('[UPLOAD] unexpected error:', err);
+        log.error({ err }, 'upload unexpected error');
         return c.json({ error: err.message }, 500);
     }
 });
@@ -1528,36 +1568,30 @@ app.route('/api3', api3Routes);          // 0305 1:1 模拟接口
 // 启动
 // ============================================================
 const PORT = parseInt(process.env.PORT || '8199');
-const RUN_DB_INIT = String(process.env.RUN_DB_INIT || '').toLowerCase() === '1' ||
-    String(process.env.RUN_DB_INIT || '').toLowerCase() === 'true';
-const RUN_DB_MIGRATIONS = String(process.env.RUN_DB_MIGRATIONS || '').toLowerCase() === '1' ||
-    String(process.env.RUN_DB_MIGRATIONS || '').toLowerCase() === 'true';
 
 async function boot() {
-    if (RUN_DB_INIT) {
-        console.log('[BOOT] RUN_DB_INIT enabled: running initDB()');
-        await initDB();
-    } else {
-        console.log('[BOOT] RUN_DB_INIT disabled: skipping initDB() (recommended for production)');
+    if (process.env.RUN_DB_INIT || process.env.RUN_DB_MIGRATIONS) {
+        log.warn(
+            {
+                RUN_DB_INIT: process.env.RUN_DB_INIT || null,
+                RUN_DB_MIGRATIONS: process.env.RUN_DB_MIGRATIONS || null,
+            },
+            'database init and migration flags are ignored at runtime; use scripts instead'
+        );
     }
 
-    if (RUN_DB_MIGRATIONS) {
-        console.log('[BOOT] RUN_DB_MIGRATIONS enabled: running safety migrations');
-        await ensureReservationMobileUnique();
-        await ensureUserSubscribeUniqueByBizType();
-        await ensureCoreForeignKeys();
-    }
+    startMessageTaskWorker();
 
     serve({
         fetch: app.fetch,
         port: PORT,
         hostname: '0.0.0.0',
     }, (info) => {
-        console.log(`🚀 Wedding CMS API (Hono) running on http://0.0.0.0:${info.port}`);
+        log.info({ host: '0.0.0.0', port: info.port }, 'server started');
     });
 }
 
 boot().catch((err) => {
-    console.error('❌ Boot failed:', err);
+    log.error({ err }, 'boot failed');
     process.exit(1);
 });

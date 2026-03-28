@@ -2,18 +2,26 @@
  * 微信服务 - 订阅消息发送
  */
 import axios from 'axios';
-import pool from '../db.js';
+import { appLogger } from '../logger.js';
 import { getWechatConfig } from './wechat-config.js';
 
-interface SubscribeMessageData {
+export interface SubscribeMessageData {
   [key: string]: {
     value: string;
   };
 }
 
+type DispatchWechatSubscribeMessageResult = {
+  success: boolean;
+  responseData: Record<string, unknown> | null;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
 // Access Token 缓存
 let cachedAccessToken: string | null = null;
 let tokenExpireTime: number = 0;
+const log = appLogger.child({ module: 'wechat-service' });
 
 /**
  * 获取微信 Access Token
@@ -44,13 +52,13 @@ async function getAccessToken(): Promise<string> {
       cachedAccessToken = response.data.access_token;
       // 默认有效期7200秒（2小时）
       tokenExpireTime = now + (response.data.expires_in || 7200) * 1000;
-      console.log('[Wechat] Access Token 获取成功');
+      log.info('wechat access token fetched');
       return cachedAccessToken as string;
     }
 
     throw new Error(`获取 Access Token 失败: ${JSON.stringify(response.data)}`);
   } catch (err: any) {
-    console.error('[Wechat] 获取 Access Token 异常:', err.message);
+    log.error({ err }, 'wechat access token fetch failed');
     throw err;
   }
 }
@@ -62,12 +70,12 @@ async function getAccessToken(): Promise<string> {
  * @param data 模板数据
  * @param page 跳转页面路径
  */
-export async function sendSubscribeMessage(
+export async function dispatchWechatSubscribeMessage(
   openId: string,
   templateId: string,
   data: SubscribeMessageData,
   page?: string
-): Promise<boolean> {
+): Promise<DispatchWechatSubscribeMessageResult> {
   try {
     const accessToken = await getAccessToken();
 
@@ -83,132 +91,27 @@ export async function sendSubscribeMessage(
     );
 
     if (response.data.errcode === 0) {
-      console.log('[Wechat] 订阅消息发送成功:', { openId, templateId });
-      return true;
+      log.info({ openId, templateId }, 'wechat subscribe message sent');
+      return {
+        success: true,
+        responseData: response.data as Record<string, unknown>,
+      };
     } else {
-      console.error('[Wechat] 订阅消息发送失败:', response.data);
-      return false;
+      log.error({ openId, templateId, response: response.data }, 'wechat subscribe message failed');
+      return {
+        success: false,
+        responseData: response.data as Record<string, unknown>,
+        errorCode: String(response.data?.errcode || 'wechat_send_failed'),
+        errorMessage: String(response.data?.errmsg || 'wechat subscribe message failed'),
+      };
     }
   } catch (err: any) {
-    console.error('[Wechat] 发送订阅消息异常:', err.message);
-    return false;
-  }
-}
-
-/**
- * 发送留资通知给用户
- * @param openId 用户OpenID
- * @param formData 表单数据
- */
-export async function sendFormSubmitNotification(
-  openId: string,
-  formData: {
-    name: string;
-    phone: string;
-    store: string;
-    weddingDate: string;
-  }
-): Promise<void> {
-  try {
-    // 从数据库查询用户是否授权了该模板
-    const [rows] = await pool.execute(
-      'SELECT template_id FROM user_subscribe WHERE open_id = ? AND biz_type = ? ORDER BY updated_at DESC, id DESC LIMIT 1',
-      [openId, 'form_submit']
-    ) as any;
-
-    if (rows.length === 0) {
-      console.log('[Wechat] 用户未授权订阅消息:', openId);
-      return;
-    }
-
-    const templateId = rows[0].template_id;
-
-    // 发送订阅消息
-    // 注意：这里的字段需要根据实际模板配置调整
-    await sendSubscribeMessage(
-      openId,
-      templateId,
-      {
-        thing1: { value: '您的预约已提交' },
-        name2: { value: formData.name.substring(0, 20) }, // 限制长度
-        phone_number3: { value: formData.phone },
-        thing4: { value: formData.store.substring(0, 20) },
-        date5: { value: formData.weddingDate || '待定' }
-      },
-      'pages/form/form'
-    );
-  } catch (err: any) {
-    console.error('[Wechat] 发送留资通知失败:', err.message);
-  }
-}
-
-/**
- * 发送新留资通知给管理员
- * @param formData 表单数据
- */
-export async function sendNewLeadNotificationToAdmins(
-  formData: {
-    name: string;
-    phone: string;
-    store: string;
-    weddingDate: string;
-  }
-): Promise<void> {
-  try {
-    // 从环境变量读取管理员 OpenID 列表
-    const adminOpenIds = process.env.ADMIN_OPENIDS?.split(',').map(id => id.trim()).filter(Boolean) || [];
-
-    if (adminOpenIds.length === 0) {
-      console.log('[Wechat] 未配置管理员 OpenID，跳过管理员通知');
-      return;
-    }
-
-    console.log(`[Wechat] 准备向 ${adminOpenIds.length} 位管理员发送新留资通知`);
-
-    // 并行发送给所有管理员
-    const sendPromises = adminOpenIds.map(async (adminOpenId) => {
-      try {
-        // 查询管理员是否授权了新留资通知模板
-        const [rows] = await pool.execute(
-          'SELECT template_id FROM user_subscribe WHERE open_id = ? AND biz_type = ? ORDER BY updated_at DESC, id DESC LIMIT 1',
-          [adminOpenId, 'new_lead_admin']
-        ) as any;
-
-        if (rows.length === 0) {
-          console.log('[Wechat] 管理员未授权订阅消息:', adminOpenId);
-          return false;
-        }
-
-        const templateId = rows[0].template_id;
-
-        // 发送订阅消息（管理员视角：收到新留资）
-        const success = await sendSubscribeMessage(
-          adminOpenId,
-          templateId,
-          {
-            thing1: { value: '新客户留资' },
-            name2: { value: formData.name.substring(0, 20) },
-            phone_number3: { value: formData.phone },
-            thing4: { value: formData.store.substring(0, 20) },
-            date5: { value: formData.weddingDate || '待定' }
-          },
-          'pages/index/index'
-        );
-
-        if (success) {
-          console.log('[Wechat] 管理员通知发送成功:', adminOpenId);
-        }
-        return success;
-      } catch (err: any) {
-        console.error('[Wechat] 向管理员发送通知失败:', adminOpenId, err.message);
-        return false;
-      }
-    });
-
-    const results = await Promise.all(sendPromises);
-    const successCount = results.filter(Boolean).length;
-    console.log(`[Wechat] 管理员通知完成: ${successCount}/${adminOpenIds.length} 成功`);
-  } catch (err: any) {
-    console.error('[Wechat] 发送管理员通知异常:', err.message);
+    log.error({ err, openId, templateId }, 'wechat subscribe message exception');
+    return {
+      success: false,
+      responseData: null,
+      errorCode: err.code || 'wechat_request_exception',
+      errorMessage: err.message || 'wechat subscribe message exception',
+    };
   }
 }

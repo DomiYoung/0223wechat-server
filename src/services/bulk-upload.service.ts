@@ -2,6 +2,9 @@ import AdmZip from 'adm-zip';
 import OSS from 'ali-oss';
 import pool from '../db.js';
 import path from 'path';
+import { appLogger } from '../logger.js';
+
+const log = appLogger.child({ module: 'bulk-upload-service' });
 
 // OSS Client
 const ossClient = new OSS({
@@ -23,7 +26,7 @@ async function uploadBufferToOSS(buffer: Buffer, objectName: string, mimeType: s
     });
     return result?.url?.replace('http://', 'https://') || null;
   } catch (err) {
-    console.error(`[BulkUpload] Error uploading ${objectName}:`, err);
+    log.error({ err, objectName }, 'bulk upload oss put failed');
     return null;
   }
 }
@@ -38,7 +41,7 @@ function getMimeType(filename: string) {
 }
 
 export async function processBulkUpload(zipBuffer: Buffer) {
-  console.log('[BulkUpload] Started processing ZIP file');
+  log.info('bulk upload started');
   const zip = new AdmZip(zipBuffer);
   const zipEntries = zip.getEntries();
   
@@ -121,7 +124,7 @@ export async function processBulkUpload(zipBuffer: Buffer) {
 
   // Process gathered structure
   for (const venueName of Object.keys(imageStructure)) {
-    console.log(`[BulkUpload] Processing mapping for: ${venueName}`);
+    log.info({ venueName }, 'bulk upload processing mapping');
     
     // Check if it's a structural venue (门店)
     const [venueResult] = await pool.query('SELECT id FROM venue WHERE name LIKE ? LIMIT 1', [`%${venueName}%`]) as any;
@@ -141,7 +144,7 @@ export async function processBulkUpload(zipBuffer: Buffer) {
       for (const subName of subNames) {
         const subSlug = CATEGORY_SLUG_MAP[subName.trim()];
         if (subSlug) {
-          console.log(`[BulkUpload] Detected combined category folder, splitting: ${subName.trim()}`);
+          log.info({ venueName, subName: subName.trim() }, 'bulk upload detected combined category folder');
           // Mark it for later processing (we process it inline below)
         }
       }
@@ -181,7 +184,7 @@ export async function processBulkUpload(zipBuffer: Buffer) {
              await pool.query('INSERT INTO venue_image (venue_id, image_url, sort_order) VALUES (?, ?, ?)', [venueId, uploadedUrls[i], i]);
           }
           report.venuesUpdated++;
-          console.log(`[BulkUpload] Updated Venue Lobby: ${venueName}`);
+          log.info({ venueName }, 'bulk upload updated venue lobby');
        } 
        else if (groupKey.startsWith('HALL_') && venueId) {
           const hallName = groupKey.replace('HALL_', '');
@@ -198,7 +201,7 @@ export async function processBulkUpload(zipBuffer: Buffer) {
                 await pool.query('INSERT INTO case_image (case_id, image_url, sort_order) VALUES (?, ?, ?)', [caseId, uploadedUrls[i], i]);
              }
              report.casesUpdated++;
-             console.log(`[BulkUpload] Updated Wedding Case Hall: ${venueName} - ${hallName}`);
+             log.info({ venueName, hallName }, 'bulk upload updated wedding case hall');
           } else {
              report.errors.push(`未匹配到宴会厅数据库记录: ${venueName} - ${hallName}`);
           }
@@ -223,7 +226,7 @@ export async function processBulkUpload(zipBuffer: Buffer) {
                 await pool.query('INSERT INTO package_image (package_id, image_url, sort_order) VALUES (?, ?, ?)', [pkgId, uploadedUrls[i], i]);
              }
              report.packagesUpdated++;
-             console.log(`[BulkUpload] Updated Package: ${venueName} - ${itemName}`);
+             log.info({ venueName, itemName }, 'bulk upload updated package');
           } else {
              // Auto-create a new package entry under this category
              const [insertResult] = await pool.query(
@@ -235,12 +238,12 @@ export async function processBulkUpload(zipBuffer: Buffer) {
                 await pool.query('INSERT INTO package_image (package_id, image_url, sort_order) VALUES (?, ?, ?)', [newPkgId, uploadedUrls[i], i]);
              }
              report.packagesUpdated++;
-             console.log(`[BulkUpload] Created & Updated Package: ${venueName} - ${itemName} (new ID: ${newPkgId})`);
+             log.info({ venueName, itemName, packageId: newPkgId }, 'bulk upload created and updated package');
           }
        }
     }
   }
 
-  console.log('[BulkUpload] Processing Complete:', report);
+  log.info({ report }, 'bulk upload completed');
   return report;
 }
