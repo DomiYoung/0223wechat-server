@@ -10,11 +10,22 @@ import { processBulkUpload } from '../services/bulk-upload.service.js';
 import { appLogger } from '../logger.js';
 import { forget, forgetByPrefix } from '../response-cache.js';
 import { adminAuthMiddleware } from '../middleware/admin-auth.js';
+import { getClientErrorMessage } from '../http-error.js';
 
 const admin305 = new Hono();
 const log = appLogger.child({ module: 'admin305-routes' });
 
 admin305.use('*', adminAuthMiddleware);
+
+function adminError(c: any, err: unknown, message = 'admin305 route failed', fallback = '服务异常，请稍后重试') {
+    log.error({ err, method: c.req.method, path: c.req.path }, message);
+    return c.json({ error: getClientErrorMessage(err, fallback) }, 500);
+}
+
+function adminCodeError(c: any, err: unknown, message = 'admin305 route failed', fallback = '服务异常，请稍后重试') {
+    log.error({ err, method: c.req.method, path: c.req.path }, message);
+    return c.json({ code: 1, message: getClientErrorMessage(err, fallback) }, 500);
+}
 
 function invalidateBrandCaches() {
     forget('brand:v1');
@@ -454,7 +465,7 @@ admin305.put('/venues/:id', async (c) => {
             params.push(body[key]);
         }
     }
-    if (sets.length === 0) return c.json({ code: 400, msg: 'No fields to update' });
+    if (sets.length === 0) return c.json({ code: 400, msg: '没有可更新字段' });
     params.push(id);
     await pool.execute(`UPDATE venue SET ${sets.join(', ')} WHERE id = ?`, params);
     invalidateLocationCaches();
@@ -487,7 +498,7 @@ admin305.get('/venue-images/:venueId', async (c) => {
 
 admin305.post('/venue-images', async (c) => {
     const { venue_id, image_url, sort_order } = await c.req.json();
-    if (!venue_id || !image_url) return c.json({ code: 400, msg: 'venue_id and image_url required' });
+    if (!venue_id || !image_url) return c.json({ code: 400, msg: 'venue_id 和 image_url 为必填项' });
     const [res] = await pool.execute(
         'INSERT INTO venue_image (venue_id, image_url, sort_order) VALUES (?, ?, ?)',
         [venue_id, image_url, sort_order || 0]
@@ -539,7 +550,7 @@ admin305.get('/venue-halls/:venueId', async (c) => {
 admin305.post('/venue-halls', async (c) => {
     const body = await c.req.json();
     const { title, hall_name, venue_id, description, cover_url } = body;
-    if (!venue_id || !hall_name) return c.json({ code: 400, msg: 'venue_id and hall_name required' });
+    if (!venue_id || !hall_name) return c.json({ code: 400, msg: 'venue_id 和 hall_name 为必填项' });
     const [res] = await pool.execute(
         `INSERT INTO wedding_case (title, hall_name, venue_id, description, cover_url, is_featured, is_active, sort_order)
          VALUES (?, ?, ?, ?, ?, 1, 1, 0)`,
@@ -561,7 +572,7 @@ admin305.put('/venue-halls/:id', async (c) => {
             params.push(body[key]);
         }
     }
-    if (sets.length === 0) return c.json({ code: 400, msg: 'No fields to update' });
+    if (sets.length === 0) return c.json({ code: 400, msg: '没有可更新字段' });
     params.push(id);
     await pool.execute(`UPDATE wedding_case SET ${sets.join(', ')} WHERE id = ?`, params);
     invalidateLocationCaches();
@@ -610,7 +621,7 @@ admin305.post('/bulk-upload', async (c) => {
         return c.json({ code: 0, data: { report } });
     } catch (err: any) {
         log.error({ err }, 'admin bulk upload failed');
-        return c.json({ error: err.message }, 500);
+        return adminError(c, err);
     }
 });
 
@@ -688,7 +699,7 @@ admin305.get('/sms-logs', async (c) => {
             }
         });
     } catch (err: any) {
-        return c.json({ code: 1, message: err.message }, 500);
+        return adminCodeError(c, err);
     }
 });
 
@@ -763,7 +774,7 @@ admin305.get('/sms-stats', async (c) => {
             }
         });
     } catch (err: any) {
-        return c.json({ code: 1, message: err.message }, 500);
+        return adminCodeError(c, err);
     }
 });
 
@@ -787,7 +798,7 @@ admin305.get('/sms-logs/:id', async (c) => {
 
         return c.json({ code: 0, data: rows[0] });
     } catch (err: any) {
-        return c.json({ code: 1, message: err.message }, 500);
+        return adminCodeError(c, err);
     }
 });
 
@@ -846,7 +857,7 @@ admin305.get('/lead-submits', async (c) => {
             }
         });
     } catch (err: any) {
-        return c.json({ code: 1, message: err.message }, 500);
+        return adminCodeError(c, err);
     }
 });
 
@@ -890,7 +901,7 @@ admin305.get('/lead-submits/:id', async (c) => {
             }
         });
     } catch (err: any) {
-        return c.json({ code: 1, message: err.message }, 500);
+        return adminCodeError(c, err);
     }
 });
 
@@ -980,7 +991,7 @@ admin305.get('/dashboard/stats', async (c) => {
             }
         });
     } catch (err: any) {
-        return c.json({ code: 1, message: err.message }, 500);
+        return adminCodeError(c, err);
     }
 });
 

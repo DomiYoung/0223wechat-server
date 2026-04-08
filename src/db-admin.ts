@@ -351,6 +351,7 @@ export async function initDB(ddlPool?: mysql.Pool) {
     try { await db.execute('ALTER TABLE wedding_case ADD INDEX idx_category (category_id)'); } catch (_) {}
     try { await db.execute('CREATE INDEX idx_active_sort_id ON wedding_case(is_active, sort_order, id)'); } catch (_) {}
     try { await db.execute('CREATE INDEX idx_active_category ON wedding_case(is_active, category_id)'); } catch (_) {}
+    try { await db.execute('CREATE INDEX idx_active_category_sort_id ON wedding_case(is_active, category_id, sort_order, id)'); } catch (_) {}
     try { await db.execute('CREATE INDEX idx_venue_featured_active_sort ON wedding_case(venue_id, is_featured, is_active, sort_order, id)'); } catch (_) {}
 
     // ============================================================
@@ -390,6 +391,7 @@ export async function initDB(ddlPool?: mysql.Pool) {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='套餐'
     `);
     try { await db.execute('CREATE INDEX idx_category_active_sort ON package(category_id, is_active, sort_order, id)'); } catch (_) {}
+    try { await db.execute('CREATE INDEX idx_active_sort_id ON package(is_active, sort_order, id)'); } catch (_) {}
 
     // ============================================================
     // 0305 扩展表：套餐图集
@@ -421,6 +423,7 @@ export async function initDB(ddlPool?: mysql.Pool) {
     try { await db.execute('ALTER TABLE venue ADD COLUMN metro_info VARCHAR(200) DEFAULT \'\' COMMENT \'地铁信息\' AFTER business_hours'); } catch (_) {}
     try { await db.execute('ALTER TABLE venue ADD COLUMN description TEXT COMMENT \'门店描述\' AFTER metro_info'); } catch (_) {}
     try { await db.execute('CREATE INDEX idx_brand_active_id ON venue(brand_id, is_active, id)'); } catch (_) {}
+    try { await db.execute('CREATE INDEX idx_active_brand_id ON venue(is_active, brand_id, id)'); } catch (_) {}
 
     // ============================================================
     // 0305 扩展表：页面动态配置 (CMS可编辑)

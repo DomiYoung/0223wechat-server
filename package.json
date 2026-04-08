@@ -10,7 +10,9 @@
     "migrate:core": "tsx scripts/db_migrate_core_constraints.ts",
     "migrate:error-log": "tsx scripts/db_migrate_error_log.ts",
     "migrate:message-task": "tsx scripts/db_migrate_message_task.ts",
-    "migrate:all": "npm run migrate:reservation-unique && npm run migrate:core && npm run migrate:error-log && npm run migrate:message-task"
+    "migrate:perf-indexes": "tsx scripts/db_migrate_perf_indexes.ts",
+    "oss:cache-control": "tsx scripts/oss_refresh_cache_control.ts --apply",
+    "migrate:all": "npm run migrate:reservation-unique && npm run migrate:core && npm run migrate:error-log && npm run migrate:message-task && npm run migrate:perf-indexes"
   },
   "dependencies": {
     "@alicloud/dysmsapi20170525": "^4.5.0",

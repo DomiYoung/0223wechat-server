@@ -14,13 +14,19 @@ import {
 } from '../services/message-task.service.js';
 import { notifySalesNewLead } from '../services/sms.service.js';
 import { remember } from '../response-cache.js';
+import { getClientErrorMessage } from '../http-error.js';
 
 const mp = new Hono();
 const log = appLogger.child({ module: 'mp-routes' });
 
 // 统一响应格式 (兼容原版 0305)
-const ok = (data: any = {}) => ({ errcode: 0, errmsg: 'success', data });
+const ok = (data: any = {}) => ({ errcode: 0, errmsg: '成功', data });
 const fail = (msg: string, code = 500) => ({ errcode: code, errmsg: msg, data: {} });
+
+function failFromError(err: unknown, fallback = '服务暂时不可用，请稍后重试', code = 500) {
+    log.error({ err }, 'mp route failed');
+    return fail(getClientErrorMessage(err, fallback), code);
+}
 
 // ============================================================
 // categoryKey → categoryId 解析映射器
@@ -105,7 +111,7 @@ mp.post('/page', async (c) => {
             bottomNav: typeof row.bottom_nav_json === 'string' ? JSON.parse(row.bottom_nav_json) : (row.bottom_nav_json || { show: false, data: {} }),
         }));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -135,7 +141,7 @@ mp.post('/categories', async (c) => {
 
         return c.json(ok({ categories }));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -179,7 +185,7 @@ mp.post('/cases', async (c) => {
 
         return c.json(ok({ list, total: countRes[0].total }));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -221,7 +227,7 @@ mp.post('/case/detail', async (c) => {
             isLiked: false, // 需要用户系统后续实现
         }));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -235,7 +241,7 @@ mp.post('/case/like', async (c) => {
         const [rows] = await pool.execute('SELECT likes FROM wedding_case WHERE id = ?', [id]) as any;
         return c.json(ok({ likes: rows[0]?.likes || 0 }));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -255,7 +261,7 @@ mp.post('/package-categories', async (c) => {
         });
         return c.json(ok({ categories }));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -303,7 +309,7 @@ mp.post('/packages', async (c) => {
 
         return c.json(ok({ list, total: countRes[0].total }));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -335,7 +341,7 @@ mp.post('/package/detail', async (c) => {
 
         return c.json(ok(pkg));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -399,7 +405,7 @@ mp.post('/venues', async (c) => {
 
         return c.json(ok({ list }));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -445,7 +451,7 @@ mp.post('/venue/detail', async (c) => {
 
         return c.json(ok(venue));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -491,7 +497,7 @@ mp.post('/venue/halls', async (c) => {
 
         return c.json(ok({ list }));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -527,7 +533,7 @@ mp.post('/hall/detail', async (c) => {
 
         return c.json(ok(hall));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -545,7 +551,7 @@ mp.post('/brand', async (c) => {
 
         return c.json(ok(brand || {}));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -562,7 +568,7 @@ mp.post('/cities', async (c) => {
         });
         return c.json(ok({ list }));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -694,7 +700,7 @@ mp.post('/submit', async (c) => {
 
         return c.json(ok({ formId: String(submitId) }));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -705,7 +711,7 @@ mp.post('/watermark', async (c) => {
     try {
         return c.json(ok({ imgUrl: '' }));
     } catch (err: any) {
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 
@@ -745,7 +751,7 @@ mp.post('/subscribe/report', async (c) => {
         return c.json(ok({ message: '订阅记录成功' }));
     } catch (err: any) {
         log.error({ err }, 'mp subscribe report failed');
-        return c.json(fail(err.message));
+        return c.json(failFromError(err));
     }
 });
 

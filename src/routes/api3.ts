@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import pool from '../db.js';
 import { appLogger } from '../logger.js';
 import { remember } from '../response-cache.js';
+import { getClientErrorMessage } from '../http-error.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const api3 = new Hono();
@@ -19,9 +20,13 @@ let dataDirFilesPromise: Promise<string[]> | null = null;
 // 统一成功响应包装
 const ok = (data: any = {}) => ({
     errcode: 0,
-    errmsg: 'success',
+    errmsg: '成功',
     data
 });
+
+function api3Error(err: unknown, fallback = '服务暂时不可用，请稍后重试') {
+    return { errcode: 500, errmsg: getClientErrorMessage(err, fallback) };
+}
 
 // 品牌映射配置
 const BRAND_MAPPINGS = [
@@ -90,10 +95,10 @@ api3.post('/zhan/xapp/page', async (c) => {
             return c.json(await readApiDumpJson('page_home_3692202.json'));
         }
 
-        return c.json(ok({ msg: 'no data' }), 404);
-    } catch (err: any) {
+        return c.json(ok({ msg: '暂无数据' }), 404);
+    } catch (err) {
         log.error({ err }, 'api3 page request failed');
-        return c.json({ errcode: 500, errmsg: err.message }, 500);
+        return c.json(api3Error(err), 500);
     }
 });
 
@@ -313,7 +318,7 @@ api3.post('/zhan/xapp/submit', async (c) => {
         }
 
         return c.json(ok({ submitId }));
-    } catch (err: any) {
+    } catch (err) {
         log.error({ err }, 'api3 submit failed');
         return c.json({ errcode: 500, errmsg: '提交失败，请稍后重试' }, 500);
     }

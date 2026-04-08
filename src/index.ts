@@ -16,6 +16,7 @@ import { adminAuthMiddleware } from './middleware/admin-auth.js';
 import { hashAdminPassword, issueAdminToken, verifyAdminPassword } from './security/admin-auth.js';
 import { getWechatConfig } from './services/wechat-config.js';
 import { appLogger, requestLogger } from './logger.js';
+import { getClientErrorMessage } from './http-error.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = new Hono();
@@ -94,14 +95,65 @@ const ossClient = new OSS({
 // ============================================================
 const uploadDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+const publicDir = path.join(__dirname, '../public');
+
+function logRouteError(c: any, err: unknown, message: string) {
+    log.error({ err, method: c.req.method, url: c.req.url }, message);
+}
+
+function jsonErrorResponse(c: any, err: unknown, message = 'route failed', fallback = '服务异常，请稍后重试') {
+    logRouteError(c, err, message);
+    return c.json({ error: getClientErrorMessage(err, fallback) }, 500);
+}
+
+function legacyMpError(
+    c: any,
+    err: unknown,
+    message = 'legacy mp route failed',
+    fallback = '服务暂时不可用，请稍后重试'
+) {
+    logRouteError(c, err, message);
+    return c.json({ errcode: 500, errmsg: getClientErrorMessage(err, fallback), data: {} });
+}
 
 app.onError((err, c) => {
     log.error({ err, method: c.req.method, url: c.req.url }, 'global error');
-    return c.json({ errcode: 500, errmsg: err.message }, 500);
+    return c.json({ errcode: 500, errmsg: getClientErrorMessage(err, '服务暂时不可用，请稍后重试') }, 500);
 });
 
 app.use('/uploads/*', serveStatic({ root: './' }));
-app.use('/assets/*', serveStatic({ root: './public' }));
+if (fs.existsSync(publicDir)) {
+    app.use('/assets/*', serveStatic({ root: './public' }));
+}
+
+app.get('/health', async (c) => {
+    try {
+        await pool.query('SELECT 1');
+        return c.json({
+            errcode: 0,
+            errmsg: '服务正常',
+            data: {
+                healthy: true,
+                service: '0223wechat-server',
+                time: new Date().toISOString(),
+            },
+        });
+    } catch (err) {
+        log.error({ err }, 'health check failed');
+        return c.json(
+            {
+                errcode: 500,
+                errmsg: '服务异常，请稍后重试',
+                data: {
+                    healthy: false,
+                    service: '0223wechat-server',
+                    time: new Date().toISOString(),
+                },
+            },
+            500
+        );
+    }
+});
 
 // ============================================================
 // 辅助函数
@@ -347,17 +399,9 @@ app.post('/api/admin/login', async (c) => {
                 admin: { id: admin.id, username: admin.username, display_name: admin.display_name, role: admin.role },
             },
         });
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+    } catch (err) {
+        return jsonErrorResponse(c, err, 'admin login failed');
     }
-});
-
-app.use('/api/admin/*', async (c, next) => {
-    if (c.req.path === '/api/admin/login') {
-        await next();
-        return;
-    }
-    await authMiddleware(c, next);
 });
 
 // ============================================================
@@ -391,9 +435,8 @@ app.post('/api/wx/login', async (c) => {
                 openid: data.openid
             }
         });
-    } catch (err: any) {
-        log.error({ err }, 'wechat login exception');
-        return c.json({ error: err.message }, 500);
+    } catch (err) {
+        return jsonErrorResponse(c, err, 'wechat login failed', '微信登录失败，请稍后重试');
     }
 });
 
@@ -437,9 +480,8 @@ app.post('/api/wx/decrypt-phone', async (c) => {
                 countryCode: phoneInfo.countryCode
             }
         });
-    } catch (err: any) {
-        log.error({ err }, 'decrypt phone failed');
-        return c.json({ error: '解密失败: ' + err.message }, 500);
+    } catch (err) {
+        return jsonErrorResponse(c, err, 'decrypt phone failed', '手机号解密失败，请稍后重试');
     }
 });
 
@@ -492,7 +534,7 @@ app.post('/api/lead/auth-phone', async (c) => {
 
         return c.json({ code: 0, data: { success: true } });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -508,7 +550,7 @@ app.get('/api/admin/cities', authMiddleware, async (c) => {
         ) as any;
         return c.json({ code: 0, data: rows });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -520,7 +562,7 @@ app.get('/api/cities', async (c) => {
         ) as any;
         return c.json({ code: 0, data: rows });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -537,7 +579,7 @@ app.post('/api/admin/cities', authMiddleware, async (c) => {
         return c.json({ code: 0, data: { id: result.insertId } });
     } catch (err: any) {
         if (err.code === 'ER_DUP_ENTRY') return c.json({ error: '城市已存在' }, 409);
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -554,7 +596,7 @@ app.put('/api/admin/cities/:id', authMiddleware, async (c) => {
         return c.json({ code: 0 });
     } catch (err: any) {
         if (err.code === 'ER_DUP_ENTRY') return c.json({ error: '城市名称重复' }, 409);
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -582,7 +624,7 @@ app.delete('/api/admin/cities/:id', authMiddleware, async (c) => {
         invalidateCityCaches();
         return c.json({ code: 0 });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -632,7 +674,7 @@ app.get('/api/admin/venues', authMiddleware, async (c) => {
 
         return c.json(paginatedResponse(rows, total, page, pageSize));
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -667,7 +709,7 @@ app.post('/api/admin/venues', authMiddleware, async (c) => {
 
         return c.json({ code: 0, data: { id: result.insertId } });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -700,7 +742,7 @@ app.put('/api/admin/venues/:id', authMiddleware, async (c) => {
         );
         return c.json({ code: 0 });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -724,7 +766,7 @@ app.delete('/api/admin/venues/:id', authMiddleware, async (c) => {
         }
         return c.json({ code: 0 });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -778,7 +820,7 @@ app.get('/api/admin/themes', authMiddleware, async (c) => {
             result.pageSize
         ));
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -805,7 +847,7 @@ app.post('/api/admin/themes', authMiddleware, async (c) => {
 
         return c.json({ code: 0, data: { id: caseId } });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -831,7 +873,7 @@ app.put('/api/admin/themes/:id', authMiddleware, async (c) => {
 
         return c.json({ code: 0 });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -854,7 +896,7 @@ app.delete('/api/admin/themes/:id', authMiddleware, async (c) => {
         }
         return c.json({ code: 0 });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -926,7 +968,7 @@ app.get('/api/admin/reservations', authMiddleware, async (c) => {
 
         return c.json(paginatedResponse(rows, total, page, pageSize));
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -989,7 +1031,7 @@ app.post('/api/reservation', async (c) => {
 
         return c.json({ code: 0, data: { id: result.insertId } });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -1004,7 +1046,7 @@ app.put('/api/admin/reservations/:id', authMiddleware, async (c) => {
         );
         return c.json({ code: 0 });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -1046,7 +1088,7 @@ app.get('/api/home', async (c) => {
 
         return c.json({ code: 0, data: { venues, cases } });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -1083,7 +1125,7 @@ app.get('/api/venues', async (c) => {
 
         return c.json({ code: 0, data: rows });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -1120,7 +1162,7 @@ app.get('/api/cases/live', async (c) => {
 
         return c.json({ code: 0, data: result });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -1155,7 +1197,7 @@ app.get('/api/cases/:id', async (c) => {
 
         return c.json({ code: 0, data: caseData });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -1177,7 +1219,7 @@ app.get('/api/themes', async (c) => {
 
         return c.json({ code: 0, data: result.list.map(toPublicTheme) });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -1212,7 +1254,7 @@ app.get('/api/themes/:id', async (c) => {
 
         return c.json({ code: 0, data: toPublicThemeDetail(themeData) });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -1288,7 +1330,7 @@ app.post('/api/booking', async (c) => {
 
         return c.json({ code: 0, data: { id: result.insertId } });
     } catch (err: any) {
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
@@ -1296,7 +1338,7 @@ app.post('/api/booking', async (c) => {
 // Weimob 1:1 Replica API 兼容层
 // ============================================================
 
-const weimobOk = (data: any = {}) => ({ errcode: 0, errmsg: 'success', data });
+const weimobOk = (data: any = {}) => ({ errcode: 0, errmsg: '成功', data });
 
 // 1. 授权留资 (savePhoneData) -> 写入 lead_auth_log
 app.post('/api3/zhan/xapp/savePhoneData', async (c) => {
@@ -1323,7 +1365,7 @@ app.post('/api3/zhan/xapp/savePhoneData', async (c) => {
         return c.json(weimobOk());
     } catch (err: any) {
         log.error({ err }, 'savePhoneData error');
-        return c.json({ errcode: 500, errmsg: err.message, data: {} });
+        return legacyMpError(c, err);
     }
 });
 
@@ -1377,7 +1419,7 @@ app.post('/api3/zhan/xapp/submit', async (c) => {
         return c.json(weimobOk());
     } catch (err: any) {
         log.error({ err }, 'submit error');
-        return c.json({ errcode: 500, errmsg: err.message, data: {} });
+        return legacyMpError(c, err);
     }
 });
 
@@ -1453,7 +1495,7 @@ app.post('/api3/zhan/xapp/form/list', async (c) => {
         }));
     } catch (err: any) {
         log.error({ err }, 'form list error');
-        return c.json({ errcode: 500, errmsg: err.message, data: {} });
+        return legacyMpError(c, err);
     }
 });
 
@@ -1469,7 +1511,7 @@ app.post('/api3/zhan/xapp/form/detail', async (c) => {
         ) as any;
 
         if (rows.length === 0) {
-            return c.json({ errcode: 1044, errmsg: 'not found', data: {} });
+            return c.json({ errcode: 1044, errmsg: '未找到记录', data: {} });
         }
 
         const row = rows[0];
@@ -1497,7 +1539,7 @@ app.post('/api3/zhan/xapp/form/detail', async (c) => {
         }));
     } catch (err: any) {
         log.error({ err }, 'form detail error');
-        return c.json({ errcode: 500, errmsg: err.message, data: {} });
+        return legacyMpError(c, err);
     }
 });
 
@@ -1540,6 +1582,7 @@ app.post('/api/upload', authMiddleware, async (c) => {
             headers: {
                 'Content-Type': file.type || 'application/octet-stream',
                 'Content-Disposition': 'inline',
+                'Cache-Control': 'public, max-age=31536000, immutable',
             },
         });
         if (!result?.url) {
@@ -1552,7 +1595,7 @@ app.post('/api/upload', authMiddleware, async (c) => {
         return c.json({ code: 0, data: { url: secureUrl } });
     } catch (err: any) {
         log.error({ err }, 'upload unexpected error');
-        return c.json({ error: err.message }, 500);
+        return jsonErrorResponse(c, err);
     }
 });
 
