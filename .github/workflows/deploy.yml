@@ -1,37 +1,36 @@
 name: Deploy WeChat Server
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'src/**'
-      - 'scripts/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'bun.lock'
-      - 'tsconfig.json'
-      - 'ecosystem.config.cjs'
-      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 要部署的 Git 引用（分支、Tag 或提交 SHA）
+        required: true
+        default: main
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
         with:
-          bun-version: latest
+          ref: ${{ github.event.inputs.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
 
       - name: Install Dependencies
-        run: bun install
+        run: npm ci
 
       - name: Build Project
-        run: bun run build
+        run: npm run build
 
       - name: Deploy to Server
         env:
@@ -40,50 +39,41 @@ jobs:
           SERVER_PASS: ${{ secrets.SERVER_PASS }}
           DEST_PATH: /www/wwwroot/0223wechat-server
         run: |
-          # 安装 sshpass 和 rsync（使用缓存加速）
-          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass rsync > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass rsync > /dev/null
 
-          SSH_CMD="sshpass -p $SERVER_PASS ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP"
-          RSYNC_CMD="sshpass -p $SERVER_PASS rsync -rz --progress -e 'ssh -o StrictHostKeyChecking=no'"
+          SSH_OPTS="-o StrictHostKeyChecking=no"
 
-          # 1. 备份当前 dist（回滚用）
           echo "📦 备份当前版本..."
-          $SSH_CMD "cd $DEST_PATH && rm -rf dist.bak && cp -r dist dist.bak 2>/dev/null || true"
+          sshpass -p "$SERVER_PASS" ssh $SSH_OPTS "$SERVER_USER@$SERVER_IP" \
+            "cd $DEST_PATH && rm -rf .deploy-backup && mkdir -p .deploy-backup && cp -r dist scripts src package.json package-lock.json tsconfig.json ecosystem.config.cjs .deploy-backup/ 2>/dev/null || true"
 
-          # 2. 同步文件
-          echo "🚀 同步核心文件..."
-          sshpass -p "$SERVER_PASS" rsync -rz -e "ssh -o StrictHostKeyChecking=no" package.json package-lock.json tsconfig.json ecosystem.config.cjs $SERVER_USER@$SERVER_IP:$DEST_PATH/
-          sshpass -p "$SERVER_PASS" rsync -rz --delete -e "ssh -o StrictHostKeyChecking=no" dist/ $SERVER_USER@$SERVER_IP:$DEST_PATH/dist/
-          sshpass -p "$SERVER_PASS" rsync -rz --delete -e "ssh -o StrictHostKeyChecking=no" src/ $SERVER_USER@$SERVER_IP:$DEST_PATH/src/
-          sshpass -p "$SERVER_PASS" rsync -rz --delete -e "ssh -o StrictHostKeyChecking=no" scripts/ $SERVER_USER@$SERVER_IP:$DEST_PATH/scripts/
+          echo "🚀 同步部署文件..."
+          sshpass -p "$SERVER_PASS" rsync -az -e "ssh $SSH_OPTS" package.json package-lock.json tsconfig.json ecosystem.config.cjs "$SERVER_USER@$SERVER_IP:$DEST_PATH/"
+          sshpass -p "$SERVER_PASS" rsync -az --delete -e "ssh $SSH_OPTS" dist/ "$SERVER_USER@$SERVER_IP:$DEST_PATH/dist/"
+          sshpass -p "$SERVER_PASS" rsync -az --delete -e "ssh $SSH_OPTS" scripts/ "$SERVER_USER@$SERVER_IP:$DEST_PATH/scripts/"
+          sshpass -p "$SERVER_PASS" rsync -az --delete -e "ssh $SSH_OPTS" src/ "$SERVER_USER@$SERVER_IP:$DEST_PATH/src/"
 
-          # 3. 安装依赖
-          echo "📦 安装依赖..."
-          $SSH_CMD "cd $DEST_PATH && npm install --production 2>&1 | tail -5"
+          echo "📦 安装依赖并执行迁移..."
+          sshpass -p "$SERVER_PASS" ssh $SSH_OPTS "$SERVER_USER@$SERVER_IP" \
+            "cd $DEST_PATH && npm ci && npm run migrate:all"
 
-          # 4. 数据库迁移
-          echo "🗄️ 执行数据库迁移..."
-          $SSH_CMD "cd $DEST_PATH && npx tsx scripts/db_migrate_core_constraints.ts 2>&1"
-          $SSH_CMD "cd $DEST_PATH && npx tsx scripts/db_migrate_reservation_unique.ts 2>&1"
-          $SSH_CMD "cd $DEST_PATH && npx tsx scripts/db_migrate_error_log.ts 2>&1"
-          $SSH_CMD "cd $DEST_PATH && npx tsx scripts/db_migrate_message_task.ts 2>&1"
+          echo "♻️ 重启 PM2..."
+          sshpass -p "$SERVER_PASS" ssh $SSH_OPTS "$SERVER_USER@$SERVER_IP" \
+            "cd $DEST_PATH && pm2 startOrRestart ecosystem.config.cjs --env production"
 
-          # 5. 重启服务
-          echo "🚀 重启服务..."
-          $SSH_CMD "cd $DEST_PATH && pm2 startOrRestart ecosystem.config.cjs --env production"
-
-          # 6. 健康检查（等待 5 秒后验证）
           echo "🏥 健康检查..."
           sleep 5
-          HEALTH_STATUS=$($SSH_CMD "curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8199/mp/venues -H 'Content-Type: application/json' -d '{}' --connect-timeout 10")
-          if [ "$HEALTH_STATUS" = "200" ]; then
-            echo "✅ 部署成功！健康检查通过 (HTTP $HEALTH_STATUS)"
-          else
-            echo "❌ 健康检查失败 (HTTP $HEALTH_STATUS)，回滚..."
-            $SSH_CMD "cd $DEST_PATH && rm -rf dist && mv dist.bak dist && pm2 restart wechat-server"
+          HEALTH_STATUS=$(sshpass -p "$SERVER_PASS" ssh $SSH_OPTS "$SERVER_USER@$SERVER_IP" \
+            "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8199/health --connect-timeout 10")
+          if [ "$HEALTH_STATUS" != "200" ]; then
+            echo "❌ 健康检查失败 (HTTP $HEALTH_STATUS)，执行回滚..."
+            sshpass -p "$SERVER_PASS" ssh $SSH_OPTS "$SERVER_USER@$SERVER_IP" \
+              "cd $DEST_PATH && cp -r .deploy-backup/* . && pm2 restart wechat-server"
             exit 1
           fi
 
-          # 7. 清理备份
-          $SSH_CMD "cd $DEST_PATH && rm -rf dist.bak"
-          echo "🎉 部署完成！"
+          echo "🧹 清理部署备份..."
+          sshpass -p "$SERVER_PASS" ssh $SSH_OPTS "$SERVER_USER@$SERVER_IP" \
+            "cd $DEST_PATH && rm -rf .deploy-backup"
+          echo "✅ 部署完成"
