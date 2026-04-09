@@ -1,12 +1,19 @@
 name: Deploy WeChat Server
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       ref:
         description: 要部署的 Git 引用（分支、Tag 或提交 SHA）
         required: true
         default: main
+
+concurrency:
+  group: deploy-wechat-server-production
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
@@ -18,7 +25,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
