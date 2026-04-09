@@ -49,6 +49,37 @@ function invalidateLocationCaches() {
     forgetByPrefix('venues:v1:');
 }
 
+type ImageRowInput =
+    | string
+    | { image_url?: string; url?: string }
+    | null
+    | undefined;
+
+function normalizeImageRows(images: unknown) {
+    if (!Array.isArray(images)) return [];
+
+    return images
+        .map((image) => {
+            const imageInput = image as ImageRowInput;
+            if (!imageInput) return null;
+
+            const imageUrl = typeof imageInput === 'string'
+                ? imageInput.trim()
+                : String(imageInput.image_url || imageInput.url || '').trim();
+
+            if (!imageUrl) return null;
+
+            return {
+                image_url: imageUrl,
+            };
+        })
+        .filter((image): image is { image_url: string } => Boolean(image))
+        .map((image, index) => ({
+            ...image,
+            sort_order: index,
+        }));
+}
+
 // ============================================================
 // 品牌管理 (brand)
 // ============================================================
@@ -456,6 +487,8 @@ admin305.get('/venues', async (c) => {
 admin305.put('/venues/:id', async (c) => {
     const id = c.req.param('id');
     const body = await c.req.json();
+    const hasImages = Array.isArray(body.images);
+    const images = normalizeImageRows(body.images);
     const allowed = ['name', 'address', 'phone', 'city', 'lat', 'lng', 'business_hours', 'metro_info', 'description', 'cover_url', 'is_active', 'brand_id'];
     const sets: string[] = [];
     const params: any[] = [];
@@ -465,9 +498,38 @@ admin305.put('/venues/:id', async (c) => {
             params.push(body[key]);
         }
     }
-    if (sets.length === 0) return c.json({ code: 400, msg: '没有可更新字段' });
-    params.push(id);
-    await pool.execute(`UPDATE venue SET ${sets.join(', ')} WHERE id = ?`, params);
+
+    if (sets.length === 0 && !hasImages) {
+        return c.json({ code: 400, msg: '没有可更新字段' });
+    }
+
+    const conn = await pool.getConnection();
+    try {
+        await conn.beginTransaction();
+
+        if (sets.length > 0) {
+            params.push(id);
+            await conn.execute(`UPDATE venue SET ${sets.join(', ')} WHERE id = ?`, params);
+        }
+
+        if (hasImages) {
+            await conn.execute('DELETE FROM venue_image WHERE venue_id = ?', [id]);
+            for (const image of images) {
+                await conn.execute(
+                    'INSERT INTO venue_image (venue_id, image_url, sort_order) VALUES (?, ?, ?)',
+                    [id, image.image_url, image.sort_order]
+                );
+            }
+        }
+
+        await conn.commit();
+    } catch (err) {
+        try { await conn.rollback(); } catch (_) {}
+        throw err;
+    } finally {
+        conn.release();
+    }
+
     invalidateLocationCaches();
     return c.json({ code: 0 });
 });
@@ -475,13 +537,38 @@ admin305.put('/venues/:id', async (c) => {
 admin305.post('/venues', async (c) => {
     const body = await c.req.json();
     const { name, address, phone, city, brand_id, metro_info, description, cover_url } = body;
-    const [res] = await pool.execute(
-        `INSERT INTO venue (name, address, phone, city, brand_id, metro_info, description, cover_url)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [name, address || '', phone || '', city || '上海', brand_id || null, metro_info || '', description || '', cover_url || '']
-    ) as any;
+    const images = normalizeImageRows(body.images);
+    const conn = await pool.getConnection();
+    let venueId = 0;
+
+    try {
+        await conn.beginTransaction();
+
+        const [res] = await conn.execute(
+            `INSERT INTO venue (name, address, phone, city, brand_id, metro_info, description, cover_url)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [name, address || '', phone || '', city || '上海', brand_id || null, metro_info || '', description || '', cover_url || '']
+        ) as any;
+
+        venueId = res.insertId;
+
+        for (const image of images) {
+            await conn.execute(
+                'INSERT INTO venue_image (venue_id, image_url, sort_order) VALUES (?, ?, ?)',
+                [venueId, image.image_url, image.sort_order]
+            );
+        }
+
+        await conn.commit();
+    } catch (err) {
+        try { await conn.rollback(); } catch (_) {}
+        throw err;
+    } finally {
+        conn.release();
+    }
+
     invalidateLocationCaches();
-    return c.json({ code: 0, data: { id: res.insertId } });
+    return c.json({ code: 0, data: { id: venueId } });
 });
 
 // ============================================================
