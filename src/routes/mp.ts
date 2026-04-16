@@ -217,21 +217,10 @@ mp.post('/case/detail', async (c) => {
         const caseData = rows[0];
 
         // 获取图集
-        const [imagesRows] = await pool.execute(
-            'SELECT image_url, batch_version FROM case_image WHERE case_id = ? ORDER BY sort_order', [id]
+        const [images] = await pool.execute(
+            'SELECT image_url FROM case_image WHERE case_id = ? ORDER BY sort_order', [id]
         ) as any;
-
-        let displayImages = imagesRows;
-        // 如果存在不同的批次，挑出日期最近的一个批次作为展示内容
-        const batches = [...new Set(imagesRows.map((i: any) => i.batch_version).filter(Boolean))];
-        if (batches.length > 0) {
-            batches.sort((a, b) => (b as string).localeCompare(a as string));
-            const latestBatch = batches[0];
-            // 只保留最新批次 或者 没有批次标记的老图
-            displayImages = imagesRows.filter((i: any) => i.batch_version === latestBatch || !i.batch_version);
-        }
-
-        caseData.images = displayImages.map((i: any) => i.image_url);
+        caseData.images = images.map((i: any) => i.image_url);
 
         return c.json(ok({
             ...caseData,
@@ -313,7 +302,7 @@ mp.post('/packages', async (c) => {
              FROM package p
              LEFT JOIN package_category pc ON p.category_id = pc.id
              WHERE ${where}
-             ORDER BY IFNULL(p.price, 999999999) ASC, p.sort_order ASC, p.id DESC
+             ORDER BY p.sort_order ASC, p.id DESC
              LIMIT ? OFFSET ?`,
             [...params, Math.min(50, pageSize), offset]
         ) as any;
@@ -345,19 +334,10 @@ mp.post('/package/detail', async (c) => {
 
         const pkg = rows[0];
 
-        const [imagesRows] = await pool.execute(
-            'SELECT image_url, batch_version FROM package_image WHERE package_id = ? ORDER BY sort_order', [id]
+        const [images] = await pool.execute(
+            'SELECT image_url FROM package_image WHERE package_id = ? ORDER BY sort_order', [id]
         ) as any;
-
-        let displayImages = imagesRows;
-        const batches = [...new Set(imagesRows.map((i: any) => i.batch_version).filter(Boolean))];
-        if (batches.length > 0) {
-            batches.sort((a, b) => (b as string).localeCompare(a as string));
-            const latestBatch = batches[0];
-            displayImages = imagesRows.filter((i: any) => i.batch_version === latestBatch || !i.batch_version);
-        }
-
-        pkg.images = displayImages.map((i: any) => i.image_url);
+        pkg.images = images.map((i: any) => i.image_url);
 
         return c.json(ok(pkg));
     } catch (err: any) {
@@ -546,19 +526,10 @@ mp.post('/hall/detail', async (c) => {
         const hall = rows[0];
 
         // 获取图集
-        const [imagesRows] = await pool.execute(
-            'SELECT image_url, batch_version FROM case_image WHERE case_id = ? ORDER BY sort_order', [id]
+        const [images] = await pool.execute(
+            'SELECT image_url FROM case_image WHERE case_id = ? ORDER BY sort_order', [id]
         ) as any;
-
-        let displayImages = imagesRows;
-        const batches = [...new Set(imagesRows.map((i: any) => i.batch_version).filter(Boolean))];
-        if (batches.length > 0) {
-            batches.sort((a, b) => (b as string).localeCompare(a as string));
-            const latestBatch = batches[0];
-            displayImages = imagesRows.filter((i: any) => i.batch_version === latestBatch || !i.batch_version);
-        }
-
-        hall.images = displayImages.map((i: any) => i.image_url);
+        hall.images = images.map((i: any) => i.image_url);
 
         return c.json(ok(hall));
     } catch (err: any) {

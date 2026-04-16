@@ -37,14 +37,11 @@ function getMimeType(filename: string) {
   if (ext === '.png') return 'image/png';
   if (ext === '.gif') return 'image/gif';
   if (ext === '.webp') return 'image/webp';
-  if (ext === '.mp4') return 'video/mp4';
-  if (ext === '.m4v') return 'video/x-m4v';
-  if (ext === '.mov') return 'video/quicktime';
   return 'application/octet-stream';
 }
 
-export async function processBulkUpload(zipBuffer: Buffer, targetBatchVersion?: string) {
-  log.info({ targetBatchVersion }, 'bulk upload started');
+export async function processBulkUpload(zipBuffer: Buffer) {
+  log.info('bulk upload started');
   const zip = new AdmZip(zipBuffer);
   const zipEntries = zip.getEntries();
   
@@ -53,31 +50,11 @@ export async function processBulkUpload(zipBuffer: Buffer, targetBatchVersion?: 
     venuesUpdated: 0,
     casesUpdated: 0,
     packagesUpdated: 0,
-    archivedCases: 0,
-    archivedPackages: 0,
     errors: [] as string[]
   };
 
-  // 如果指定了目标批次，先归档旧数据
-  if (targetBatchVersion) {
-    const [caseArchive] = await pool.execute(
-      `UPDATE wedding_case SET is_active = 0 WHERE is_active = 1 AND (batch_version IS NULL OR batch_version != ?)`,
-      [targetBatchVersion]
-    ) as any;
-    report.archivedCases = caseArchive.affectedRows || 0;
-
-    const [pkgArchive] = await pool.execute(
-      `UPDATE package SET is_active = 0 WHERE is_active = 1 AND (batch_version IS NULL OR batch_version != ?)`,
-      [targetBatchVersion]
-    ) as any;
-    report.archivedPackages = pkgArchive.affectedRows || 0;
-    log.info({ archivedCases: report.archivedCases, archivedPackages: report.archivedPackages }, 'bulk upload archived old data');
-  }
-
   // Group images by folder paths
   const imageStructure: Record<string, Record<string, AdmZip.IZipEntry[]>> = {};
-
-  const MEDIA_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.mp4', '.m4v', '.mov'];
 
   for (const entry of zipEntries) {
     if (entry.isDirectory || entry.entryName.includes('__MACOSX') || entry.name.startsWith('.')) {
@@ -85,7 +62,7 @@ export async function processBulkUpload(zipBuffer: Buffer, targetBatchVersion?: 
     }
 
     const ext = path.extname(entry.name).toLowerCase();
-    if (!MEDIA_EXTENSIONS.includes(ext)) {
+    if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
       continue;
     }
 
@@ -156,16 +133,10 @@ export async function processBulkUpload(zipBuffer: Buffer, targetBatchVersion?: 
     // Check if it's a category-based folder (分类)
     const categorySlug = CATEGORY_SLUG_MAP[venueName];
     let packageCategoryId: number | null = null;
-    let businessCategoryId: number | null = null;
-
     if (categorySlug) {
       const [catResult] = await pool.query('SELECT id FROM package_category WHERE slug = ? LIMIT 1', [categorySlug]) as any;
       packageCategoryId = catResult.length > 0 ? catResult[0].id : null;
     }
-
-    // Always fetch business category ID for the "No 筵" fallback
-    const [bizCatResult] = await pool.query('SELECT id FROM package_category WHERE slug = ? LIMIT 1', ['business']) as any;
-    businessCategoryId = bizCatResult.length > 0 ? bizCatResult[0].id : null;
 
     // Also handle combined folder names like "生日宝宝宴:商务年会"
     if (!venueId && !packageCategoryId && venueName.includes(':')) {
@@ -236,53 +207,38 @@ export async function processBulkUpload(zipBuffer: Buffer, targetBatchVersion?: 
           }
        }
        // ============================================================
-       // 分类套餐匹配 (生日宝宝宴 / 商务宴会 / 婚庆等解析)
+       // 分类套餐匹配 (生日宝宝宴 / 商务宴会)
        // ============================================================
-       else if (groupKey.startsWith('CATEGORY_ITEM_') && (packageCategoryId || businessCategoryId)) {
-          let itemName = groupKey.replace('CATEGORY_ITEM_', '');
-          let activeCategoryId = packageCategoryId;
-
-          // rule: No "筵" = Business
-          if (!itemName.includes('筵') && businessCategoryId) {
-             activeCategoryId = businessCategoryId;
-          }
-
-          if (!activeCategoryId) continue;
-
-          // Extract price from itemName (e.g., "89800元套餐" -> 89800)
-          let price: number | null = null;
-          const priceMatch = itemName.match(/(\d+)/);
-          if (priceMatch) {
-             price = parseInt(priceMatch[1], 10);
-          }
+       else if (groupKey.startsWith('CATEGORY_ITEM_') && packageCategoryId) {
+          const itemName = groupKey.replace('CATEGORY_ITEM_', '');
           
           // Try to find an existing package with this name
           const [pkgResult] = await pool.query(
              'SELECT id FROM package WHERE category_id = ? AND title LIKE ? LIMIT 1',
-             [activeCategoryId, `%${itemName}%`]
+             [packageCategoryId, `%${itemName}%`]
           ) as any;
 
           if (pkgResult.length > 0) {
              const pkgId = pkgResult[0].id;
-             await pool.query('UPDATE package SET cover_url = ?, price = ? WHERE id = ?', [coverUrl, price, pkgId]);
+             await pool.query('UPDATE package SET cover_url = ? WHERE id = ?', [coverUrl, pkgId]);
              await pool.query('DELETE FROM package_image WHERE package_id = ?', [pkgId]);
              for (let i = 0; i < uploadedUrls.length; i++) {
                 await pool.query('INSERT INTO package_image (package_id, image_url, sort_order) VALUES (?, ?, ?)', [pkgId, uploadedUrls[i], i]);
              }
              report.packagesUpdated++;
-             log.info({ venueName, itemName, price }, 'bulk upload updated package');
+             log.info({ venueName, itemName }, 'bulk upload updated package');
           } else {
              // Auto-create a new package entry under this category
              const [insertResult] = await pool.query(
-               'INSERT INTO package (category_id, title, cover_url, price, is_active, sort_order) VALUES (?, ?, ?, ?, 1, 0)',
-               [activeCategoryId, itemName, coverUrl, price]
+               'INSERT INTO package (category_id, title, cover_url, is_active, sort_order) VALUES (?, ?, ?, 1, 0)',
+               [packageCategoryId, itemName, coverUrl]
              ) as any;
              const newPkgId = insertResult.insertId;
              for (let i = 0; i < uploadedUrls.length; i++) {
                 await pool.query('INSERT INTO package_image (package_id, image_url, sort_order) VALUES (?, ?, ?)', [newPkgId, uploadedUrls[i], i]);
              }
              report.packagesUpdated++;
-             log.info({ venueName, itemName, price, packageId: newPkgId }, 'bulk upload created and updated package');
+             log.info({ venueName, itemName, packageId: newPkgId }, 'bulk upload created and updated package');
           }
        }
     }
