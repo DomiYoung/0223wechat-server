@@ -250,16 +250,42 @@ admin305.delete('/package-categories/:id', async (c) => {
 // ============================================================
 admin305.get('/packages', async (c) => {
     const categoryId = c.req.query('categoryId');
-    let sql = `SELECT p.*, pc.name AS category_name FROM package p LEFT JOIN package_category pc ON p.category_id = pc.id`;
+    const categorySlug = c.req.query('categorySlug');
+    const page = parseInt(c.req.query('page') || '1');
+    const pageSize = Math.min(100, parseInt(c.req.query('pageSize') || '20'));
+    const searchTerm = c.req.query('search') || '';
+    const offset = (page - 1) * pageSize;
+
+    const conditions: string[] = [];
     const params: any[] = [];
 
     if (categoryId) {
-        sql += ' WHERE p.category_id = ?';
+        conditions.push('p.category_id = ?');
         params.push(categoryId);
+    } else if (categorySlug) {
+        conditions.push('pc.slug = ?');
+        params.push(categorySlug);
     }
-    sql += ' ORDER BY p.sort_order ASC, p.id DESC';
+    if (searchTerm) {
+        conditions.push('p.title LIKE ?');
+        params.push(`%${searchTerm}%`);
+    }
 
-    const [rows] = await pool.execute(sql, params) as any;
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // 获取总数
+    const [countRes] = await pool.execute(`SELECT COUNT(*) as total FROM package p ${whereClause}`, params) as any;
+    const total = countRes[0].total;
+
+    // 获取分页数据
+    let sql = `SELECT p.*, pc.name AS category_name 
+               FROM package p 
+               LEFT JOIN package_category pc ON p.category_id = pc.id
+               ${whereClause} 
+               ORDER BY p.sort_order ASC, p.id DESC
+               LIMIT ? OFFSET ?`;
+
+    const [rows] = await pool.execute(sql, [...params, pageSize, offset]) as any;
 
     // 附带图集（批量查询，避免 N+1）
     if (rows.length > 0) {
@@ -283,7 +309,7 @@ admin305.get('/packages', async (c) => {
         }
     }
 
-    return c.json({ code: 0, data: rows });
+    return c.json({ code: 0, data: { list: rows, total, page, pageSize } });
 });
 
 admin305.post('/packages', async (c) => {
@@ -704,7 +730,7 @@ admin305.post('/bulk-upload', async (c) => {
 
         const buffer = Buffer.from(await file.arrayBuffer());
         // Do processing
-        const report = await processBulkUpload(buffer, targetBatchVersion || undefined);
+        const report = await processBulkUpload(buffer);
 
         return c.json({ code: 0, data: { report } });
     } catch (err: any) {

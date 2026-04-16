@@ -8,6 +8,7 @@ export interface ThemeQueryOptions {
   // 筛选
   cityId?: number | null;
   venueId?: number;
+  categoryId?: number;
   keyword?: string;
   featured?: number;
   active?: number;
@@ -51,6 +52,7 @@ export async function queryThemes(options: ThemeQueryOptions): Promise<Paginated
     pageSize = 20,
     cityId,
     venueId,
+    categoryId,
     keyword,
     featured,
     active,
@@ -77,6 +79,10 @@ export async function queryThemes(options: ThemeQueryOptions): Promise<Paginated
   if (venueId) {
     conditions.push('wc.venue_id = ?');
     params.push(venueId);
+  }
+  if (categoryId !== undefined) {
+    conditions.push('wc.category_id = ?');
+    params.push(categoryId);
   }
   if (keyword) {
     conditions.push("(wc.title LIKE CONCAT('%', ?, '%') OR COALESCE(NULLIF(wc.hall_name, ''), wc.style) LIKE CONCAT('%', ?, '%'))");

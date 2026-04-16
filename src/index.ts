@@ -528,11 +528,21 @@ app.post('/api/lead/auth-phone', async (c) => {
                 String(body.pagePath || ''),
                 String(body.wid || ''),
                 String(body.openId || ''),
-                toNullableJson(extraMeta),
+                JSON.stringify(extraMeta)
             ]
         );
 
-        return c.json({ code: 0, data: { success: true } });
+        // [CRM FIX] 避免漏斗流失：只要授权手机号，立刻在 CRM 里沉淀底线线索
+        await pool.execute(
+            `INSERT INTO reservation (name, mobile, source, status, submit_count, created_at, updated_at)
+             VALUES (?, ?, ?, '待跟进', 1, NOW(), NOW())
+             ON DUPLICATE KEY UPDATE
+                 submit_count = COALESCE(submit_count, 1) + 1,
+                 updated_at = NOW()`,
+            ['微信授权用户', mobile, String(body.source || '一键授权')]
+        );
+
+        return c.json({ code: 0, message: 'success' });
     } catch (err: any) {
         return jsonErrorResponse(c, err);
     }
@@ -806,6 +816,7 @@ app.get('/api/admin/themes', authMiddleware, async (c) => {
             pageSize,
             cityId: cityFilter.cityId,
             venueId: query.venueId ? parseInt(query.venueId) : undefined,
+            categoryId: query.categoryId ? parseInt(query.categoryId) : undefined,
             keyword: query.keyword,
             featured: query.featured !== undefined && query.featured !== '' ? parseInt(query.featured) : undefined,
             active: query.active !== undefined && query.active !== '' ? parseInt(query.active) : undefined,
@@ -828,14 +839,14 @@ app.get('/api/admin/themes', authMiddleware, async (c) => {
 app.post('/api/admin/themes', authMiddleware, async (c) => {
     try {
         const body = await c.req.json();
-        const { title, tag, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active, batch_version, images } = body;
+        const { title, tag, wedding_date, shop_label, description, cover_url, venue_id, category_id, sort_order, is_featured, is_active, batch_version, images } = body;
         const hallName = resolveHallNameInput(body);
         if (!title) return c.json({ error: '主题名称不能为空' }, 400);
 
         const [result] = await pool.execute(
-            `INSERT INTO wedding_case (title, tag, hall_name, style, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active, batch_version)
+            `INSERT INTO wedding_case (title, tag, hall_name, wedding_date, shop_label, description, cover_url, venue_id, category_id, sort_order, is_featured, is_active, batch_version)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [title, tag || '', hallName, hallName, wedding_date || '', shop_label || '', description || '', cover_url || '', venue_id || null, sort_order || 0, is_featured || 0, is_active ?? 1, batch_version || '']
+            [title, tag || '', hallName, wedding_date || '', shop_label || '', description || '', cover_url || '', venue_id || null, category_id || null, sort_order || 0, is_featured || 0, is_active ?? 1, batch_version || '']
         ) as any;
 
         const caseId = result.insertId;
@@ -856,13 +867,13 @@ app.put('/api/admin/themes/:id', authMiddleware, async (c) => {
     try {
         const body = await c.req.json();
         const id = c.req.param('id');
-        const { title, tag, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active, batch_version, images } = body;
+        const { title, tag, wedding_date, shop_label, description, cover_url, venue_id, category_id, sort_order, is_featured, is_active, batch_version, images } = body;
         const hallName = resolveHallNameInput(body);
 
         await pool.execute(
-            `UPDATE wedding_case SET title=?, tag=?, hall_name=?, style=?, wedding_date=?, shop_label=?, description=?, cover_url=?, venue_id=?, sort_order=?, is_featured=?, is_active=?, batch_version=?
+            `UPDATE wedding_case SET title=?, tag=?, hall_name=?, wedding_date=?, shop_label=?, description=?, cover_url=?, venue_id=?, category_id=?, sort_order=?, is_featured=?, is_active=?, batch_version=?
              WHERE id=?`,
-            [title, tag || '', hallName, hallName, wedding_date || '', shop_label || '', description || '', cover_url || '', venue_id || null, sort_order || 0, is_featured || 0, is_active ?? 1, batch_version || '', id]
+            [title, tag || '', hallName, wedding_date || '', shop_label || '', description || '', cover_url || '', venue_id || null, category_id || null, sort_order || 0, is_featured || 0, is_active ?? 1, batch_version || '', id]
         );
 
         // 更新图片：先删后插
@@ -1362,6 +1373,20 @@ app.post('/api3/zhan/xapp/savePhoneData', async (c) => {
                 wxDecryptData ? JSON.stringify(wxDecryptData) : null
             ]
         );
+        
+        // [CRM FIX] 避免漏斗流失：微盟桥接层一键授权时沉淀进客资数据库
+        const safePhone = phone || '';
+        if (safePhone) {
+            await pool.execute(
+                `INSERT INTO reservation (name, mobile, source, status, submit_count, created_at, updated_at)
+                 VALUES (?, ?, ?, '待跟进', 1, NOW(), NOW())
+                 ON DUPLICATE KEY UPDATE
+                     submit_count = COALESCE(submit_count, 1) + 1,
+                     updated_at = NOW()`,
+                ['微信授权用户', safePhone, channel || '微盟一键授权']
+            );
+        }
+
         return c.json(weimobOk());
     } catch (err: any) {
         log.error({ err }, 'savePhoneData error');
