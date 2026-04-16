@@ -313,7 +313,7 @@ mp.post('/packages', async (c) => {
              FROM package p
              LEFT JOIN package_category pc ON p.category_id = pc.id
              WHERE ${where}
-             ORDER BY IFNULL(p.price, 999999999) ASC, p.sort_order ASC, p.id DESC
+             ORDER BY p.price IS NULL, p.price ASC, p.sort_order ASC, p.id DESC
              LIMIT ? OFFSET ?`,
             [...params, Math.min(50, pageSize), offset]
         ) as any;
