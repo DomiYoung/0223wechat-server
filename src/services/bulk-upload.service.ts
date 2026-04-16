@@ -133,10 +133,16 @@ export async function processBulkUpload(zipBuffer: Buffer) {
     // Check if it's a category-based folder (分类)
     const categorySlug = CATEGORY_SLUG_MAP[venueName];
     let packageCategoryId: number | null = null;
+    let businessCategoryId: number | null = null;
+
     if (categorySlug) {
       const [catResult] = await pool.query('SELECT id FROM package_category WHERE slug = ? LIMIT 1', [categorySlug]) as any;
       packageCategoryId = catResult.length > 0 ? catResult[0].id : null;
     }
+
+    // Always fetch business category ID for the "No 筵" fallback
+    const [bizCatResult] = await pool.query('SELECT id FROM package_category WHERE slug = ? LIMIT 1', ['business']) as any;
+    businessCategoryId = bizCatResult.length > 0 ? bizCatResult[0].id : null;
 
     // Also handle combined folder names like "生日宝宝宴:商务年会"
     if (!venueId && !packageCategoryId && venueName.includes(':')) {
@@ -207,38 +213,57 @@ export async function processBulkUpload(zipBuffer: Buffer) {
           }
        }
        // ============================================================
-       // 分类套餐匹配 (生日宝宝宴 / 商务宴会)
+       // 分类套餐匹配 (生日宝宝宴 / 商务宴会 / 婚庆等解析)
        // ============================================================
-       else if (groupKey.startsWith('CATEGORY_ITEM_') && packageCategoryId) {
-          const itemName = groupKey.replace('CATEGORY_ITEM_', '');
+       else if (groupKey.startsWith('CATEGORY_ITEM_') && (packageCategoryId || businessCategoryId)) {
+          let itemName = groupKey.replace('CATEGORY_ITEM_', '');
+          let activeCategoryId = packageCategoryId;
+
+          // rule: No "筵" = Business
+          if (!itemName.includes('筵') && businessCategoryId) {
+             activeCategoryId = businessCategoryId;
+          }
+
+          if (!activeCategoryId) continue;
+
+          // Extract price from itemName (e.g., "89800元套餐" -> 89800)
+          let price: number | null = null;
+          try {
+            const priceMatch = itemName.match(/(\d+)/);
+            if (priceMatch) {
+               price = parseInt(priceMatch[1], 10);
+            }
+          } catch (e) {
+            log.warn({ itemName }, 'Failed to parse price from item name');
+          }
           
           // Try to find an existing package with this name
           const [pkgResult] = await pool.query(
              'SELECT id FROM package WHERE category_id = ? AND title LIKE ? LIMIT 1',
-             [packageCategoryId, `%${itemName}%`]
+             [activeCategoryId, `%${itemName}%`]
           ) as any;
 
           if (pkgResult.length > 0) {
              const pkgId = pkgResult[0].id;
-             await pool.query('UPDATE package SET cover_url = ? WHERE id = ?', [coverUrl, pkgId]);
+             await pool.query('UPDATE package SET cover_url = ?, price = ? WHERE id = ?', [coverUrl, price, pkgId]);
              await pool.query('DELETE FROM package_image WHERE package_id = ?', [pkgId]);
              for (let i = 0; i < uploadedUrls.length; i++) {
                 await pool.query('INSERT INTO package_image (package_id, image_url, sort_order) VALUES (?, ?, ?)', [pkgId, uploadedUrls[i], i]);
              }
              report.packagesUpdated++;
-             log.info({ venueName, itemName }, 'bulk upload updated package');
+             log.info({ venueName, itemName, price }, 'bulk upload updated package');
           } else {
              // Auto-create a new package entry under this category
              const [insertResult] = await pool.query(
-               'INSERT INTO package (category_id, title, cover_url, is_active, sort_order) VALUES (?, ?, ?, 1, 0)',
-               [packageCategoryId, itemName, coverUrl]
+               'INSERT INTO package (category_id, title, cover_url, price, is_active, sort_order) VALUES (?, ?, ?, ?, 1, 0)',
+               [activeCategoryId, itemName, coverUrl, price]
              ) as any;
              const newPkgId = insertResult.insertId;
              for (let i = 0; i < uploadedUrls.length; i++) {
                 await pool.query('INSERT INTO package_image (package_id, image_url, sort_order) VALUES (?, ?, ?)', [newPkgId, uploadedUrls[i], i]);
              }
              report.packagesUpdated++;
-             log.info({ venueName, itemName, packageId: newPkgId }, 'bulk upload created and updated package');
+             log.info({ venueName, itemName, price, packageId: newPkgId }, 'bulk upload created and updated package');
           }
        }
     }
