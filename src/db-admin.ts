@@ -100,6 +100,7 @@ export async function initDB(ddlPool?: mysql.Pool) {
             sort_order INT DEFAULT 0 COMMENT '排序权重',
             is_featured TINYINT(1) DEFAULT 0 COMMENT '首页推荐',
             is_active TINYINT(1) DEFAULT 1 COMMENT '是否上线',
+            batch_version VARCHAR(50) DEFAULT '' COMMENT '素材批次',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_venue_active (venue_id, is_active),
@@ -113,6 +114,8 @@ export async function initDB(ddlPool?: mysql.Pool) {
     try {
         await db.execute(`ALTER TABLE wedding_case ADD COLUMN hall_name VARCHAR(100) DEFAULT '' COMMENT '展厅名称' AFTER tag`);
     } catch (_) { /* 列已存在则忽略 */ }
+    try { await db.execute('ALTER TABLE wedding_case ADD COLUMN batch_version VARCHAR(50) DEFAULT "" COMMENT "素材批次" AFTER is_active'); } catch (_) {}
+    try { await db.execute('CREATE INDEX idx_batch_version ON wedding_case(batch_version, is_active)'); } catch (_) {}
 
     // 数据回填：hall_name 为空时，用旧 style 补齐
     await db.execute(
@@ -384,6 +387,7 @@ export async function initDB(ddlPool?: mysql.Pool) {
             description TEXT COMMENT '套餐描述(富文本)',
             sort_order INT DEFAULT 0,
             is_active TINYINT(1) DEFAULT 1,
+            batch_version VARCHAR(50) DEFAULT '' COMMENT '素材批次',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_category_active (category_id, is_active),
@@ -392,6 +396,8 @@ export async function initDB(ddlPool?: mysql.Pool) {
     `);
     try { await db.execute('CREATE INDEX idx_category_active_sort ON package(category_id, is_active, sort_order, id)'); } catch (_) {}
     try { await db.execute('CREATE INDEX idx_active_sort_id ON package(is_active, sort_order, id)'); } catch (_) {}
+    try { await db.execute('ALTER TABLE package ADD COLUMN batch_version VARCHAR(50) DEFAULT "" COMMENT "素材批次" AFTER is_active'); } catch (_) {}
+    try { await db.execute('CREATE INDEX idx_batch_version ON package(batch_version, is_active)'); } catch (_) {}
 
     // ============================================================
     // 0305 扩展表：套餐图集
@@ -543,9 +549,9 @@ export async function initDB(ddlPool?: mysql.Pool) {
         const cityMap = new Map(cityRows.map((r: any) => [r.name, r.id]));
 
         const venues = [
-            { name: '花嫁丽舍·外滩店', city: '上海', address: '上海市黄浦区外滩xx号', phone: '021-12345678' },
-            { name: '花嫁丽舍·国贸店', city: '北京', address: '北京市朝阳区国贸xx号', phone: '010-12345678' },
-            { name: '花嫁丽舍·新街口店', city: '南京', address: '南京市玄武区新街口xx号', phone: '025-12345678' },
+            { name: '嘉美麓德·上海总店', city: '上海', address: '上海市地址填写处', phone: '021-12345678' },
+            { name: '嘉美麓德·漕河泾臻选店', city: '上海', address: '上海市地址填写处', phone: '021-12345678' },
+            { name: '嘉美麓德·旗舰店', city: '上海', address: '上海市地址填写处', phone: '021-12345678' },
         ];
         for (const v of venues) {
             await db.execute(

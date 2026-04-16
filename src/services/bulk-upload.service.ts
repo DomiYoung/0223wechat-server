@@ -37,11 +37,14 @@ function getMimeType(filename: string) {
   if (ext === '.png') return 'image/png';
   if (ext === '.gif') return 'image/gif';
   if (ext === '.webp') return 'image/webp';
+  if (ext === '.mp4') return 'video/mp4';
+  if (ext === '.m4v') return 'video/x-m4v';
+  if (ext === '.mov') return 'video/quicktime';
   return 'application/octet-stream';
 }
 
-export async function processBulkUpload(zipBuffer: Buffer) {
-  log.info('bulk upload started');
+export async function processBulkUpload(zipBuffer: Buffer, targetBatchVersion?: string) {
+  log.info({ targetBatchVersion }, 'bulk upload started');
   const zip = new AdmZip(zipBuffer);
   const zipEntries = zip.getEntries();
   
@@ -50,11 +53,31 @@ export async function processBulkUpload(zipBuffer: Buffer) {
     venuesUpdated: 0,
     casesUpdated: 0,
     packagesUpdated: 0,
+    archivedCases: 0,
+    archivedPackages: 0,
     errors: [] as string[]
   };
 
+  // 如果指定了目标批次，先归档旧数据
+  if (targetBatchVersion) {
+    const [caseArchive] = await pool.execute(
+      `UPDATE wedding_case SET is_active = 0 WHERE is_active = 1 AND (batch_version IS NULL OR batch_version != ?)`,
+      [targetBatchVersion]
+    ) as any;
+    report.archivedCases = caseArchive.affectedRows || 0;
+
+    const [pkgArchive] = await pool.execute(
+      `UPDATE package SET is_active = 0 WHERE is_active = 1 AND (batch_version IS NULL OR batch_version != ?)`,
+      [targetBatchVersion]
+    ) as any;
+    report.archivedPackages = pkgArchive.affectedRows || 0;
+    log.info({ archivedCases: report.archivedCases, archivedPackages: report.archivedPackages }, 'bulk upload archived old data');
+  }
+
   // Group images by folder paths
   const imageStructure: Record<string, Record<string, AdmZip.IZipEntry[]>> = {};
+
+  const MEDIA_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.mp4', '.m4v', '.mov'];
 
   for (const entry of zipEntries) {
     if (entry.isDirectory || entry.entryName.includes('__MACOSX') || entry.name.startsWith('.')) {
@@ -62,7 +85,7 @@ export async function processBulkUpload(zipBuffer: Buffer) {
     }
 
     const ext = path.extname(entry.name).toLowerCase();
-    if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+    if (!MEDIA_EXTENSIONS.includes(ext)) {
       continue;
     }
 

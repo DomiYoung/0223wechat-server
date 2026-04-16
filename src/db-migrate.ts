@@ -22,6 +22,7 @@ const migratePassword = process.env.DB_MIGRATE_PASSWORD || process.env.DB_PASSWO
 
 export const migratePool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
   user: migrateUser,
   password: migratePassword,
   database: process.env.DB_NAME || 'wedding_cms',

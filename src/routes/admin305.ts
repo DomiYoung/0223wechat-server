@@ -287,13 +287,13 @@ admin305.get('/packages', async (c) => {
 });
 
 admin305.post('/packages', async (c) => {
-    const { category_id, title, cover_url, price, price_label, tag, description, sort_order, images } = await c.req.json();
+    const { category_id, title, cover_url, price, price_label, tag, description, sort_order, batch_version, images } = await c.req.json();
     if (!category_id || !title) return c.json({ error: '分类和标题必填' }, 400);
 
     const [result] = await pool.execute(
-        `INSERT INTO package (category_id, title, cover_url, price, price_label, tag, description, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [category_id, title, cover_url || null, price || null, price_label || '', tag || '', description || '', sort_order || 0]
+        `INSERT INTO package (category_id, title, cover_url, price, price_label, tag, description, sort_order, batch_version)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [category_id, title, cover_url || null, price || null, price_label || '', tag || '', description || '', sort_order || 0, batch_version || '']
     ) as any;
 
     const pkgId = result.insertId;
@@ -314,7 +314,7 @@ admin305.post('/packages', async (c) => {
 admin305.put('/packages/:id', async (c) => {
     const id = c.req.param('id');
     const body = await c.req.json();
-    const fields = ['category_id', 'title', 'cover_url', 'price', 'price_label', 'tag', 'description', 'sort_order', 'is_active'];
+    const fields = ['category_id', 'title', 'cover_url', 'price', 'price_label', 'tag', 'description', 'sort_order', 'batch_version', 'is_active'];
     const sets: string[] = [];
     const params: any[] = [];
 
@@ -692,6 +692,7 @@ admin305.post('/bulk-upload', async (c) => {
     try {
         const body = await c.req.parseBody();
         const file = body['file'] as File;
+        const targetBatchVersion = (body['target_batch_version'] as string) || '';
 
         if (!file || typeof file === 'string' || typeof file.arrayBuffer !== 'function') {
             return c.json({ error: '请选择.zip压缩包文件' }, 400);
@@ -703,7 +704,7 @@ admin305.post('/bulk-upload', async (c) => {
 
         const buffer = Buffer.from(await file.arrayBuffer());
         // Do processing
-        const report = await processBulkUpload(buffer);
+        const report = await processBulkUpload(buffer, targetBatchVersion || undefined);
 
         return c.json({ code: 0, data: { report } });
     } catch (err: any) {

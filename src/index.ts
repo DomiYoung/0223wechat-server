@@ -828,14 +828,14 @@ app.get('/api/admin/themes', authMiddleware, async (c) => {
 app.post('/api/admin/themes', authMiddleware, async (c) => {
     try {
         const body = await c.req.json();
-        const { title, tag, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active, images } = body;
+        const { title, tag, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active, batch_version, images } = body;
         const hallName = resolveHallNameInput(body);
         if (!title) return c.json({ error: '主题名称不能为空' }, 400);
 
         const [result] = await pool.execute(
-            `INSERT INTO wedding_case (title, tag, hall_name, style, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [title, tag || '', hallName, hallName, wedding_date || '', shop_label || '', description || '', cover_url || '', venue_id || null, sort_order || 0, is_featured || 0, is_active ?? 1]
+            `INSERT INTO wedding_case (title, tag, hall_name, style, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active, batch_version)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [title, tag || '', hallName, hallName, wedding_date || '', shop_label || '', description || '', cover_url || '', venue_id || null, sort_order || 0, is_featured || 0, is_active ?? 1, batch_version || '']
         ) as any;
 
         const caseId = result.insertId;
@@ -856,13 +856,13 @@ app.put('/api/admin/themes/:id', authMiddleware, async (c) => {
     try {
         const body = await c.req.json();
         const id = c.req.param('id');
-        const { title, tag, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active, images } = body;
+        const { title, tag, wedding_date, shop_label, description, cover_url, venue_id, sort_order, is_featured, is_active, batch_version, images } = body;
         const hallName = resolveHallNameInput(body);
 
         await pool.execute(
-            `UPDATE wedding_case SET title=?, tag=?, hall_name=?, style=?, wedding_date=?, shop_label=?, description=?, cover_url=?, venue_id=?, sort_order=?, is_featured=?, is_active=?
+            `UPDATE wedding_case SET title=?, tag=?, hall_name=?, style=?, wedding_date=?, shop_label=?, description=?, cover_url=?, venue_id=?, sort_order=?, is_featured=?, is_active=?, batch_version=?
              WHERE id=?`,
-            [title, tag || '', hallName, hallName, wedding_date || '', shop_label || '', description || '', cover_url || '', venue_id || null, sort_order || 0, is_featured || 0, is_active ?? 1, id]
+            [title, tag || '', hallName, hallName, wedding_date || '', shop_label || '', description || '', cover_url || '', venue_id || null, sort_order || 0, is_featured || 0, is_active ?? 1, batch_version || '', id]
         );
 
         // 更新图片：先删后插
