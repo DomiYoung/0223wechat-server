@@ -74,7 +74,8 @@ export async function initDB(ddlPool?: mysql.Pool) {
             is_active TINYINT(1) DEFAULT 1 COMMENT '是否启用',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_city_active (city, is_active),
-            INDEX idx_city_id (city_id)
+            INDEX idx_city_id (city_id),
+            INDEX idx_brand_active_name (brand_id, is_active, name(50))
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='门店场地'
     `);
 
@@ -162,7 +163,8 @@ export async function initDB(ddlPool?: mysql.Pool) {
             INDEX idx_created (created_at DESC),
             INDEX idx_city_status (city, status),
             INDEX idx_city_id (city_id),
-            INDEX idx_openid (wechat_openid)
+            INDEX idx_openid (wechat_openid),
+            INDEX idx_venue_status_created (venue_id, status, created_at DESC)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客资预约CRM'
     `);
 

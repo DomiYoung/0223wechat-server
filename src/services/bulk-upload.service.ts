@@ -182,89 +182,92 @@ export async function processBulkUpload(zipBuffer: Buffer) {
        if (uploadedUrls.length === 0) continue;
        const coverUrl = uploadedUrls[0];
 
-       if (groupKey === 'LOBBY' && venueId) {
-          // Update venue cover and banner images
-          await pool.query('UPDATE venue SET cover_url = ? WHERE id = ?', [coverUrl, venueId]);
-          await pool.query('DELETE FROM venue_image WHERE venue_id = ?', [venueId]);
-          for (let i = 0; i < uploadedUrls.length; i++) {
-             await pool.query('INSERT INTO venue_image (venue_id, image_url, sort_order) VALUES (?, ?, ?)', [venueId, uploadedUrls[i], i]);
-          }
-          report.venuesUpdated++;
-          log.info({ venueName }, 'bulk upload updated venue lobby');
-       } 
-       else if (groupKey.startsWith('HALL_') && venueId) {
-          const hallName = groupKey.replace('HALL_', '');
-          const [caseResult] = await pool.query(
-             'SELECT id FROM wedding_case WHERE venue_id = ? AND (title LIKE ? OR hall_name LIKE ?) LIMIT 1', 
-             [venueId, `%${hallName}%`, `%${hallName}%`]
-          ) as any;
-
-          if (caseResult.length > 0) {
-             const caseId = caseResult[0].id;
-             await pool.query('UPDATE wedding_case SET cover_url = ? WHERE id = ?', [coverUrl, caseId]);
-             await pool.query('DELETE FROM case_image WHERE case_id = ?', [caseId]);
-             for (let i = 0; i < uploadedUrls.length; i++) {
-                await pool.query('INSERT INTO case_image (case_id, image_url, sort_order) VALUES (?, ?, ?)', [caseId, uploadedUrls[i], i]);
-             }
-             report.casesUpdated++;
-             log.info({ venueName, hallName }, 'bulk upload updated wedding case hall');
-          } else {
-             report.errors.push(`未匹配到宴会厅数据库记录: ${venueName} - ${hallName}`);
-          }
-       }
        // ============================================================
-       // 分类套餐匹配 (生日宝宝宴 / 商务宴会 / 婚庆等解析)
+       // Using Transaction for DB updates to ensure atomicity
        // ============================================================
-       else if (groupKey.startsWith('CATEGORY_ITEM_') && (packageCategoryId || businessCategoryId)) {
-          let itemName = groupKey.replace('CATEGORY_ITEM_', '');
-          let activeCategoryId = packageCategoryId;
+       const conn = await pool.getConnection();
+       try {
+          await conn.beginTransaction();
 
-          // rule: No "筵" = Business
-          if (!itemName.includes('筵') && businessCategoryId) {
-             activeCategoryId = businessCategoryId;
-          }
-
-          if (!activeCategoryId) continue;
-
-          // Extract price from itemName (e.g., "89800元套餐" -> 89800)
-          let price: number | null = null;
-          try {
-            const priceMatch = itemName.match(/(\d+)/);
-            if (priceMatch) {
-               price = parseInt(priceMatch[1], 10);
-            }
-          } catch (e) {
-            log.warn({ itemName }, 'Failed to parse price from item name');
-          }
-          
-          // Try to find an existing package with this name
-          const [pkgResult] = await pool.query(
-             'SELECT id FROM package WHERE category_id = ? AND title LIKE ? LIMIT 1',
-             [activeCategoryId, `%${itemName}%`]
-          ) as any;
-
-          if (pkgResult.length > 0) {
-             const pkgId = pkgResult[0].id;
-             await pool.query('UPDATE package SET cover_url = ?, price = ? WHERE id = ?', [coverUrl, price, pkgId]);
-             await pool.query('DELETE FROM package_image WHERE package_id = ?', [pkgId]);
+          if (groupKey === 'LOBBY' && venueId) {
+             // Update venue cover and banner images
+             await conn.query('UPDATE venue SET cover_url = ? WHERE id = ?', [coverUrl, venueId]);
+             await conn.query('DELETE FROM venue_image WHERE venue_id = ?', [venueId]);
              for (let i = 0; i < uploadedUrls.length; i++) {
-                await pool.query('INSERT INTO package_image (package_id, image_url, sort_order) VALUES (?, ?, ?)', [pkgId, uploadedUrls[i], i]);
+                await conn.query('INSERT INTO venue_image (venue_id, image_url, sort_order) VALUES (?, ?, ?)', [venueId, uploadedUrls[i], i]);
              }
-             report.packagesUpdated++;
-             log.info({ venueName, itemName, price }, 'bulk upload updated package');
-          } else {
-             // Auto-create a new package entry under this category
-             const [insertResult] = await pool.query(
-               'INSERT INTO package (category_id, title, cover_url, price, is_active, sort_order) VALUES (?, ?, ?, ?, 1, 0)',
-               [activeCategoryId, itemName, coverUrl, price]
+             report.venuesUpdated++;
+             log.info({ venueName }, 'bulk upload updated venue lobby');
+          } 
+          else if (groupKey.startsWith('HALL_') && venueId) {
+             const hallName = groupKey.replace('HALL_', '');
+             const [caseResult] = await conn.query(
+                'SELECT id FROM wedding_case WHERE venue_id = ? AND (title LIKE ? OR hall_name LIKE ?) LIMIT 1', 
+                [venueId, `%${hallName}%`, `%${hallName}%`]
              ) as any;
-             const newPkgId = insertResult.insertId;
-             for (let i = 0; i < uploadedUrls.length; i++) {
-                await pool.query('INSERT INTO package_image (package_id, image_url, sort_order) VALUES (?, ?, ?)', [newPkgId, uploadedUrls[i], i]);
+
+             if (caseResult.length > 0) {
+                const caseId = caseResult[0].id;
+                await conn.query('UPDATE wedding_case SET cover_url = ? WHERE id = ?', [coverUrl, caseId]);
+                await conn.query('DELETE FROM case_image WHERE case_id = ?', [caseId]);
+                for (let i = 0; i < uploadedUrls.length; i++) {
+                   await conn.query('INSERT INTO case_image (case_id, image_url, sort_order) VALUES (?, ?, ?)', [caseId, uploadedUrls[i], i]);
+                }
+                report.casesUpdated++;
+                log.info({ venueName, hallName }, 'bulk upload updated wedding case hall');
+             } else {
+                report.errors.push(`未匹配到宴会厅数据库记录: ${venueName} - ${hallName}`);
              }
-             report.packagesUpdated++;
-             log.info({ venueName, itemName, price, packageId: newPkgId }, 'bulk upload created and updated package');
           }
+          else if (groupKey.startsWith('CATEGORY_ITEM_') && (packageCategoryId || businessCategoryId)) {
+             let itemName = groupKey.replace('CATEGORY_ITEM_', '');
+             let activeCategoryId = packageCategoryId;
+
+             if (!itemName.includes('筵') && businessCategoryId) {
+                activeCategoryId = businessCategoryId;
+             }
+
+             if (activeCategoryId) {
+                let price: number | null = null;
+                try {
+                   const priceMatch = itemName.match(/(\d+)/);
+                   if (priceMatch) price = parseInt(priceMatch[1], 10);
+                } catch (e) {}
+                
+                const [pkgResult] = await conn.query(
+                   'SELECT id FROM package WHERE category_id = ? AND title LIKE ? LIMIT 1',
+                   [activeCategoryId, `%${itemName}%`]
+                ) as any;
+
+                if (pkgResult.length > 0) {
+                   const pkgId = pkgResult[0].id;
+                   await conn.query('UPDATE package SET cover_url = ?, price = ? WHERE id = ?', [coverUrl, price, pkgId]);
+                   await conn.query('DELETE FROM package_image WHERE package_id = ?', [pkgId]);
+                   for (let i = 0; i < uploadedUrls.length; i++) {
+                      await conn.query('INSERT INTO package_image (package_id, image_url, sort_order) VALUES (?, ?, ?)', [pkgId, uploadedUrls[i], i]);
+                   }
+                   report.packagesUpdated++;
+                } else {
+                   const [insertResult] = await conn.query(
+                     'INSERT INTO package (category_id, title, cover_url, price, is_active, sort_order) VALUES (?, ?, ?, ?, 1, 0)',
+                     [activeCategoryId, itemName, coverUrl, price]
+                   ) as any;
+                   const newPkgId = insertResult.insertId;
+                   for (let i = 0; i < uploadedUrls.length; i++) {
+                      await conn.query('INSERT INTO package_image (package_id, image_url, sort_order) VALUES (?, ?, ?)', [newPkgId, uploadedUrls[i], i]);
+                   }
+                   report.packagesUpdated++;
+                }
+             }
+          }
+
+          await conn.commit();
+       } catch (err: any) {
+          await conn.rollback();
+          log.error({ err, venueName, groupKey }, 'bulk upload transaction failed');
+          report.errors.push(`数据库更新失败 (${groupKey}): ${err.message}`);
+       } finally {
+          conn.release();
        }
     }
   }
