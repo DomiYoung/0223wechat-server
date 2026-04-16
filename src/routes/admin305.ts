@@ -282,7 +282,7 @@ admin305.get('/packages', async (c) => {
                FROM package p 
                LEFT JOIN package_category pc ON p.category_id = pc.id
                ${whereClause} 
-               ORDER BY IFNULL(p.price, 999999999) ASC, p.sort_order ASC, p.id DESC
+               ORDER BY CASE WHEN p.price IS NULL OR p.price = 0 OR p.price = '' THEN 999999999 ELSE CAST(p.price AS DECIMAL(10,2)) END ASC, p.sort_order ASC, p.id DESC
                LIMIT ? OFFSET ?`;
 
     const [rows] = await pool.execute(sql, [...params, pageSize, offset]) as any;
