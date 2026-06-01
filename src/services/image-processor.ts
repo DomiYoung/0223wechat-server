@@ -59,6 +59,15 @@ function shouldProcess(
   const height = metadata.height || 0;
   const maxDim = Math.max(width, height);
 
+  // 1. 【CPU 熔断快速防卡死防线】：如果图片最长边 > 12000px，或者单文件 > 12MB，这属于超规格巨图。
+  // 在服务器端强行使用 sharp 解码/重构图片会瞬间侵占数 GB 内存并将单核 CPU 飙至 100%，导致整台服务器所有接口卡死假死。
+  // 我们采用最高效的熔断短路设计：直接返回 false 不进行同步处理，快速 0ms 返回原图。
+  // 复杂的超大图优化我们会推给 PC 后台的前端上传拦截器（方案A）在客户端来做，从而绝对保证服务器高可用与极速响应！
+  if (maxDim > 12000 || originalSize > 12 * 1024 * 1024) {
+    return false;
+  }
+
+  // 2. 常规尺寸/常规体积大图优化处理
   if (maxDim > MAX_DIMENSION_PX) return true;
   if (originalSize > 5 * 1024 * 1024) return true; // >5MB
   if (CONVERT_TO_WEBP && metadata.format !== 'webp') return true;
@@ -114,23 +123,46 @@ export async function processImage(
     // 自动纠正方向（基于 EXIF）
     pipeline = pipeline.rotate();
 
-    // 缩放到最长边 ≤ maxDimension
     const maxDim = Math.max(metadata.width || 0, metadata.height || 0);
-    if (maxDim > maxDimension) {
-      pipeline = pipeline.resize(maxDimension, maxDimension, {
+
+    // 缩放尺寸自适应高清调整：
+    // 如果是一般图片，最长边缩放到 4096 像素（maxDimension）已极其高清。
+    // 如果原图是超高清大图或拼接长图（最长边 > 8192px 且在安全线以内），粗暴地缩到 4096px 会使其彻底模糊丢细节。
+    // 我们对于这种图采用“高保真宽限度缩放”，将最长边限宽大幅提升到 10000px，既能大幅节省体积，又绝对保证细节不糊！
+    let finalMaxDimension = maxDimension;
+    if (maxDim > 8192) {
+      finalMaxDimension = Math.min(10000, maxDim);
+    }
+
+    if (maxDim > finalMaxDimension) {
+      pipeline = pipeline.resize(finalMaxDimension, finalMaxDimension, {
         fit: 'inside',
         withoutEnlargement: true,
       });
     }
 
-    // 转 WebP
-    const outputExt = convertToWebp ? '.webp' : `.${(metadata.format || 'jpg').replace('jpeg', 'jpg')}`;
-    const outputMime = convertToWebp
-      ? 'image/webp'
-      : `image/${(metadata.format || 'jpeg').replace('jpeg', 'jpeg')}`;
+    // 自动判定：如果图片最长边超出了 16383 像素（WebP 的安全软限制或硬限制），
+    // 强制不转 WebP，改用 JPEG 格式进行高保真压缩（质量 95），规避 sharp 的 WebP 编码器超长图限制报错！
+    let finalConvertToWebp = convertToWebp;
+    let finalQuality = webpQuality;
 
-    if (convertToWebp) {
-      pipeline = pipeline.webp({ quality: webpQuality });
+    if (maxDim > 16383) {
+      finalConvertToWebp = false;
+      finalQuality = 95;
+      log.info(
+        { name: originalName, maxDim },
+        'Image is extremely large. Force converting to high-fidelity JPEG (Quality 95) instead of WebP to prevent encoder limits.',
+      );
+    }
+
+    // 转 WebP 或 JPEG
+    const outputExt = finalConvertToWebp ? '.webp' : '.jpg';
+    const outputMime = finalConvertToWebp ? 'image/webp' : 'image/jpeg';
+
+    if (finalConvertToWebp) {
+      pipeline = pipeline.webp({ quality: finalQuality });
+    } else {
+      pipeline = pipeline.jpeg({ quality: finalQuality });
     }
 
     // 去除元数据（EXIF + ICC + XMP）
