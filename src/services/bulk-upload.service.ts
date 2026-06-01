@@ -6,20 +6,22 @@ import { appLogger } from '../logger.js';
 
 const log = appLogger.child({ module: 'bulk-upload-service' });
 
-// OSS Client
-const ossClient = new OSS({
-  region: process.env.ALIYUN_OSS_REGION || 'oss-cn-shanghai',
-  accessKeyId: process.env.ALIYUN_OSS_ACCESS_KEY_ID || '',
-  accessKeySecret: process.env.ALIYUN_OSS_ACCESS_KEY_SECRET || '',
-  bucket: process.env.ALIYUN_OSS_BUCKET || 'creativepro',
-});
+// OSS Client — lazy init，运行时才读取 env，避免 import 时 crash
+function getOssClient() {
+  return new OSS({
+    region: process.env.ALIYUN_OSS_REGION || 'oss-cn-shanghai',
+    accessKeyId: process.env.ALIYUN_OSS_ACCESS_KEY_ID || '',
+    accessKeySecret: process.env.ALIYUN_OSS_ACCESS_KEY_SECRET || '',
+    bucket: process.env.ALIYUN_OSS_BUCKET || 'creativepro',
+  });
+}
 
 const uploadPathBase = 'wechat-miniprogram/assets/bulk';
 const imageExts = /\.(jpg|jpeg|png|gif|webp|bmp|tiff?)$/i;
 
 async function uploadBufferToOSS(buffer: Buffer, objectName: string, mimeType: string) {
   try {
-    const result = await ossClient.put(objectName, buffer, {
+    const result = await getOssClient().put(objectName, buffer, {
       headers: {
         'Content-Type': mimeType || 'application/octet-stream',
         'Content-Disposition': 'inline',

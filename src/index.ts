@@ -84,12 +84,19 @@ app.use('*', async (c, next) => {
     }
 });
 
-const ossClient = new OSS({
-    region: process.env.ALIYUN_OSS_REGION || 'oss-cn-shanghai',
-    accessKeyId: process.env.ALIYUN_OSS_ACCESS_KEY_ID || '',
-    accessKeySecret: process.env.ALIYUN_OSS_ACCESS_KEY_SECRET || '',
-    bucket: process.env.ALIYUN_OSS_BUCKET || 'creativepro'
-});
+// OSS client — lazy init to avoid crashing on import without env vars
+let _ossClient: OSS | null = null;
+function getOssClient(): OSS {
+  if (!_ossClient) {
+    _ossClient = new OSS({
+      region: process.env.ALIYUN_OSS_REGION || 'oss-cn-shanghai',
+      accessKeyId: process.env.ALIYUN_OSS_ACCESS_KEY_ID || '',
+      accessKeySecret: process.env.ALIYUN_OSS_ACCESS_KEY_SECRET || '',
+      bucket: process.env.ALIYUN_OSS_BUCKET || 'creativepro',
+    });
+  }
+  return _ossClient;
+}
 
 // ============================================================
 // 静态文件 & 上传目录
@@ -1648,7 +1655,7 @@ app.post('/api/upload', authMiddleware, async (c) => {
 
         const fileName = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${uploadExt}`;
 
-        const result = await ossClient.put(fileName, buffer, {
+        const result = await getOssClient().put(fileName, buffer, {
             headers: {
                 'Content-Type': uploadContentType,
                 'Content-Disposition': 'inline',
