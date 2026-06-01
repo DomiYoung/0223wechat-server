@@ -1,7 +1,7 @@
 module.exports = {
   apps: [{
     name: 'wechat-server',
-    script: 'dist/src/index.js',
+    script: 'dist/index.js',
     cwd: '/www/wwwroot/0223wechat-server',
     instances: 1,
     exec_mode: 'fork',
