@@ -17,6 +17,7 @@ import { hashAdminPassword, issueAdminToken, verifyAdminPassword } from './secur
 import { getWechatConfig } from './services/wechat-config.js';
 import { appLogger, requestLogger } from './logger.js';
 import { getClientErrorMessage } from './http-error.js';
+import { processImage } from './services/image-processor.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = new Hono();
@@ -426,6 +427,22 @@ app.post('/api/wx/login', async (c) => {
         if (data.errcode) {
             log.error({ data }, 'wechat login failed');
             return c.json({ error: data.errmsg || '微信登录失败' }, 400);
+        }
+
+        // 1. 写入/更新 wx_user 表（UPSERT by openid）
+        if (data.openid) {
+            try {
+                await pool.execute(
+                    `INSERT INTO wx_user (openid)
+                     VALUES (?)
+                     ON DUPLICATE KEY UPDATE updated_at = NOW()`,
+                    [data.openid]
+                );
+                log.info({ openid: data.openid }, 'wx_user upserted');
+            } catch (dbErr) {
+                // wx_user 写入失败不阻塞登录
+                log.warn({ openid: data.openid, err: dbErr }, 'wx_user upsert failed (non-blocking)');
+            }
         }
 
         return c.json({
@@ -1200,7 +1217,7 @@ app.get('/api/cases/:id', async (c) => {
 
         // 获取图片列表
         const [images] = await pool.execute(
-            `SELECT id, image_url, sort_order FROM case_image WHERE case_id = ? ORDER BY sort_order`,
+            `SELECT id, image_url, sort_order FROM case_image WHERE case_id = ? AND is_active = 1 ORDER BY sort_order`,
             [id]
         ) as any;
 
@@ -1257,7 +1274,7 @@ app.get('/api/themes/:id', async (c) => {
 
         // 获取图片列表
         const [images] = await pool.execute(
-            `SELECT id, image_url, sort_order FROM case_image WHERE case_id = ? ORDER BY sort_order`,
+            `SELECT id, image_url, sort_order FROM case_image WHERE case_id = ? AND is_active = 1 ORDER BY sort_order`,
             [id]
         ) as any;
 
@@ -1595,17 +1612,45 @@ app.post('/api/upload', authMiddleware, async (c) => {
         }
 
         const ext = path.extname(file.name) || '.jpg';
-        const fileName = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
-        const buffer = Buffer.from(await file.arrayBuffer());
-        log.info({ traceId, bufferLength: buffer.length }, 'upload buffer ready');
-        if (buffer.length <= 0) {
+        const rawBuffer = Buffer.from(await file.arrayBuffer()) as Buffer;
+        log.info({ traceId, bufferLength: rawBuffer.length }, 'upload buffer ready');
+        if (rawBuffer.length <= 0) {
             log.warn({ traceId, fileName: file.name }, 'upload buffer length is zero');
             return c.json({ error: '读取上传文件失败（0B），请重试' }, 400);
         }
 
+        // 图片预处理：压缩 / 缩放 / 转 WebP（非图片格式直接跳过）
+        const imageExts = /\.(jpg|jpeg|png|gif|webp|bmp|tiff?)$/i;
+        const needsImageProcessing = imageExts.test(file.name) || /^image\//.test(file.type || '');
+        let buffer = rawBuffer;
+        let uploadExt = ext;
+        let uploadContentType = file.type || 'application/octet-stream';
+
+        if (needsImageProcessing) {
+            const processed = await processImage(rawBuffer, file.name);
+            buffer = processed.buffer;
+            uploadExt = processed.ext;
+            uploadContentType = processed.mimeType;
+            if (processed.originalSize !== processed.processedSize) {
+                log.info(
+                    {
+                        traceId,
+                        originalName: file.name,
+                        originalSize: processed.originalSize,
+                        processedSize: processed.processedSize,
+                        savedPct: Math.round((1 - processed.processedSize / processed.originalSize) * 100),
+                        newExt: uploadExt,
+                    },
+                    'image processed before OSS upload',
+                );
+            }
+        }
+
+        const fileName = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${uploadExt}`;
+
         const result = await ossClient.put(fileName, buffer, {
             headers: {
-                'Content-Type': file.type || 'application/octet-stream',
+                'Content-Type': uploadContentType,
                 'Content-Disposition': 'inline',
                 'Cache-Control': 'public, max-age=31536000, immutable',
             },

@@ -15,6 +15,7 @@ const ossClient = new OSS({
 });
 
 const uploadPathBase = 'wechat-miniprogram/assets/bulk';
+const imageExts = /\.(jpg|jpeg|png|gif|webp|bmp|tiff?)$/i;
 
 async function uploadBufferToOSS(buffer: Buffer, objectName: string, mimeType: string) {
   try {
@@ -172,10 +173,24 @@ export async function processBulkUpload(zipBuffer: Buffer) {
 
        const uploadedUrls: string[] = [];
        for (const entry of entries) {
-          const buffer = entry.getData();
-          const mime = getMimeType(entry.name);
-          const objectName = `${uploadPathBase}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${entry.name}`;
-          const url = await uploadBufferToOSS(buffer, objectName, mime);
+          const rawBuffer = entry.getData();
+          const originalName = entry.name;
+          const mime = getMimeType(originalName);
+          // 图片预处理（自动判断是否需要处理）
+          let buffer = rawBuffer;
+          let processedMime = mime;
+          const { processImage } = await import('./image-processor.js');
+          if (imageExts.test(originalName)) {
+             const processed = await processImage(rawBuffer, originalName);
+             buffer = processed.buffer;
+             processedMime = processed.mimeType;
+             log.info(
+                { name: originalName, originalSize: rawBuffer.length, processedSize: processed.processedSize },
+                'bulk upload image processed',
+             );
+          }
+          const objectName = `${uploadPathBase}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}${path.extname(originalName)}`;
+          const url = await uploadBufferToOSS(buffer, objectName, processedMime);
           if (url) uploadedUrls.push(url);
        }
 

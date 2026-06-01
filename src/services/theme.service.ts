@@ -130,7 +130,7 @@ export async function queryThemes(options: ThemeQueryOptions): Promise<Paginated
     const caseIds = rows.map((r: any) => r.id);
     const placeholders = caseIds.map(() => '?').join(',');
     const [images] = await pool.execute(
-      `SELECT * FROM case_image WHERE case_id IN (${placeholders}) ORDER BY sort_order ASC`,
+      `SELECT * FROM case_image WHERE case_id IN (${placeholders}) AND is_active = 1 ORDER BY sort_order ASC`,
       caseIds
     ) as any;
 

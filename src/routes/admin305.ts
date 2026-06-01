@@ -603,7 +603,7 @@ admin305.post('/venues', async (c) => {
 admin305.get('/venue-images/:venueId', async (c) => {
     const venueId = c.req.param('venueId');
     const [rows] = await pool.execute(
-        'SELECT id, venue_id, image_url, sort_order FROM venue_image WHERE venue_id = ? ORDER BY sort_order',
+        'SELECT id, venue_id, image_url, sort_order FROM venue_image WHERE venue_id = ? AND is_active = 1 ORDER BY sort_order',
         [venueId]
     ) as any;
     return c.json({ code: 0, data: { list: rows } });
