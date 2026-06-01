@@ -218,7 +218,7 @@ mp.post('/case/detail', async (c) => {
 
         // 获取图集
         const [images] = await pool.execute(
-            'SELECT image_url FROM case_image WHERE case_id = ? ORDER BY sort_order', [id]
+            'SELECT image_url FROM case_image WHERE case_id = ? AND is_active = 1 ORDER BY sort_order', [id]
         ) as any;
         caseData.images = images.map((i: any) => i.image_url);
 
@@ -335,7 +335,7 @@ mp.post('/package/detail', async (c) => {
         const pkg = rows[0];
 
         const [images] = await pool.execute(
-            'SELECT image_url FROM package_image WHERE package_id = ? ORDER BY sort_order', [id]
+            'SELECT image_url FROM package_image WHERE package_id = ? AND is_active = 1 ORDER BY sort_order', [id]
         ) as any;
         pkg.images = images.map((i: any) => i.image_url);
 
@@ -387,7 +387,7 @@ mp.post('/venues', async (c) => {
             if (venueIds.length > 0) {
                 const placeholders = venueIds.map(() => '?').join(',');
                 const [allImgs] = await pool.execute(
-                    `SELECT venue_id, image_url FROM venue_image WHERE venue_id IN (${placeholders}) ORDER BY sort_order`,
+                    `SELECT venue_id, image_url FROM venue_image WHERE venue_id IN (${placeholders}) AND is_active = 1 ORDER BY sort_order`,
                     venueIds
                 ) as any;
                 const imgMap = new Map<number, string[]>();
@@ -435,7 +435,7 @@ mp.post('/venue/detail', async (c) => {
 
         // 轮播图
         const [imgs] = await pool.execute(
-            'SELECT image_url FROM venue_image WHERE venue_id = ? ORDER BY sort_order', [id]
+            'SELECT image_url FROM venue_image WHERE venue_id = ? AND is_active = 1 ORDER BY sort_order', [id]
         ) as any;
         venue.images = imgs.map((i: any) => i.image_url);
 
@@ -479,7 +479,7 @@ mp.post('/venue/halls', async (c) => {
             const placeholders = hallIds.map(() => '?').join(',');
             const [coverImgs] = await pool.execute(
                 `SELECT case_id, image_url FROM case_image 
-                 WHERE case_id IN (${placeholders}) 
+                 WHERE case_id IN (${placeholders}) AND is_active = 1
                  ORDER BY sort_order`,
                 hallIds
             ) as any;
@@ -527,7 +527,7 @@ mp.post('/hall/detail', async (c) => {
 
         // 获取图集
         const [images] = await pool.execute(
-            'SELECT image_url FROM case_image WHERE case_id = ? ORDER BY sort_order', [id]
+            'SELECT image_url FROM case_image WHERE case_id = ? AND is_active = 1 ORDER BY sort_order', [id]
         ) as any;
         hall.images = images.map((i: any) => i.image_url);
 
@@ -705,11 +705,52 @@ mp.post('/submit', async (c) => {
 });
 
 // ============================================================
-// 分享海报 (对应原版 POST /api3/zhan/xapp/watermark)
+// 分享海报数据 (对应原版 POST /api3/zhan/xapp/watermark)
+// 返回 canvas 合成所需的素材数据
 // ============================================================
 mp.post('/watermark', async (c) => {
     try {
-        return c.json(ok({ imgUrl: '' }));
+        const { type, id } = await c.req.json();
+
+        let poster: any = {};
+
+        if (type === 'case' && id) {
+            const [rows] = await pool.execute(
+                `SELECT wc.title, wc.cover_url AS coverUrl, wc.description,
+                        v.name AS venueName,
+                        COALESCE(ct.name, v.city) AS city
+                 FROM wedding_case wc
+                 LEFT JOIN venue v ON wc.venue_id = v.id
+                 LEFT JOIN city ct ON v.city_id = ct.id
+                 WHERE wc.id = ? AND wc.is_active = 1`,
+                [id]
+            ) as any;
+            poster = rows[0] || {};
+        } else if (type === 'package' && id) {
+            const [rows] = await pool.execute(
+                `SELECT p.title, p.cover_url AS coverUrl, p.description
+                 FROM package p
+                 WHERE p.id = ? AND p.is_active = 1`,
+                [id]
+            ) as any;
+            poster = rows[0] || {};
+        } else if (type === 'venue' && id) {
+            const [rows] = await pool.execute(
+                `SELECT v.name AS title, v.cover_url AS coverUrl, v.description
+                 FROM venue v
+                 WHERE v.id = ? AND v.is_active = 1`,
+                [id]
+            ) as any;
+            poster = rows[0] || {};
+        }
+
+        return c.json(ok({
+            poster: {
+                ...poster,
+                appName: '圣拉维婚礼艺术中心',
+                qrCodeUrl: '',  // TODO: 接入小程序码生成服务后替换
+            }
+        }));
     } catch (err: any) {
         return c.json(failFromError(err));
     }
