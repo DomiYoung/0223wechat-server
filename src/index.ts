@@ -1549,6 +1549,7 @@ app.post('/api3/zhan/xapp/submit', async (c) => {
         const extractWeimobData = (fields: any[]) => {
             let name = '';
             let weddingDate = '';
+            let weddingPeriod = '';
             let store = '';
             let remark = '';
             let tablesCount = '';
@@ -1562,7 +1563,9 @@ app.post('/api3/zhan/xapp/submit', async (c) => {
                     
                     if (mark === 'name' || key === 'name' || label.includes('姓名') || label.includes('名字')) {
                         name = val;
-                    } else if (mark === 'weddingDate' || key === 'weddingDate' || label.includes('婚期') || label.includes('日期')) {
+                    } else if (mark === 'weddingPeriod' || key === 'weddingPeriod' || label.includes('时段') || label === '预定婚期') {
+                        weddingPeriod = val;
+                    } else if (mark === 'weddingDate' || key === 'weddingDate' || (label.includes('婚期') && !label.includes('时段')) || label.includes('日期')) {
                         weddingDate = val;
                     } else if (mark === 'store' || key === 'store' || label.includes('意向门店') || label.includes('门店') || label.includes('店铺')) {
                         store = val;
@@ -1573,7 +1576,7 @@ app.post('/api3/zhan/xapp/submit', async (c) => {
                     }
                 }
             }
-            return { name, weddingDate, store, remark, tablesCount };
+            return { name, weddingDate: weddingDate || weddingPeriod || '', store, remark, tablesCount };
         };
 
         const weimobInfo = extractWeimobData(data);

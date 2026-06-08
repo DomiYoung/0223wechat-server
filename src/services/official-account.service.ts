@@ -155,7 +155,14 @@ export async function notifySalesViaOfficialAccount(lead: {
 
   const timeStr = formatTime(lead.submitTime || new Date());
 
-  // 微信新版类目模板变量名映射适配，thing 类型强限制 20 字符以内，需截断防错
+  // 拼装客户预约意向（婚期 + 桌数），让销售直接可见
+  let intentStr = '';
+  if (lead.weddingDate) intentStr += lead.weddingDate;
+  if (lead.tablesCount) {
+    intentStr += (intentStr ? '/' : '') + lead.tablesCount + '桌';
+  }
+  if (!intentStr) intentStr = lead.source || '在线预约';
+
   const data: TemplateMessageData = {
     thing11: {
       value: (lead.name || '微信用户').substring(0, 20),
@@ -174,7 +181,7 @@ export async function notifySalesViaOfficialAccount(lead: {
       color: '#111111',
     },
     thing2: {
-      value: (lead.source || '在线预约').substring(0, 20),
+      value: intentStr.substring(0, 20),
       color: '#111111',
     }
   };
