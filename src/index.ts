@@ -19,6 +19,7 @@ import { appLogger, requestLogger } from './logger.js';
 import { getClientErrorMessage } from './http-error.js';
 import { processImage } from './services/image-processor.js';
 import { notifyNewLead } from './services/notification.service.js';
+import { getWechatPhoneNumber } from './services/wechat.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = new Hono();
@@ -1432,6 +1433,7 @@ const weimobOk = (data: any = {}) => ({ errcode: 0, errmsg: '成功', data });
 app.post('/api3/zhan/xapp/savePhoneData', async (c) => {
     try {
         const body = await c.req.json();
+        log.info({ body }, 'savePhoneData request body received');
         const {
             formId, pageId, phone, submitType, markId, channelId, channel, mark, url,
             wid, uwid, openId, pid, zhanId, wxDecryptData
@@ -1456,7 +1458,6 @@ app.post('/api3/zhan/xapp/savePhoneData', async (c) => {
 
         // 尝试从微信 Code 换取真实手机号
         if (!safePhone && wxDecryptData && wxDecryptData.code) {
-            const { getWechatPhoneNumber } = await import('./services/wechat.service.js');
             const decryptedPhone = await getWechatPhoneNumber(wxDecryptData.code);
             if (decryptedPhone) {
                 safePhone = decryptedPhone;
