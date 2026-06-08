@@ -387,7 +387,7 @@ export async function initDB(ddlPool?: mysql.Pool) {
             price_label VARCHAR(50) DEFAULT '' COMMENT '价格标签文字',
             tag VARCHAR(50) DEFAULT '' COMMENT '标签: 热门/推荐',
             description TEXT COMMENT '套餐描述(富文本)',
-            sort_order INT DEFAULT 0,
+            sort_order INT DEFAULT 999,
             is_active TINYINT(1) DEFAULT 1,
             batch_version VARCHAR(50) DEFAULT '' COMMENT '素材批次',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

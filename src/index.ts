@@ -18,6 +18,7 @@ import { getWechatConfig } from './services/wechat-config.js';
 import { appLogger, requestLogger } from './logger.js';
 import { getClientErrorMessage } from './http-error.js';
 import { processImage } from './services/image-processor.js';
+import { notifyNewLead } from './services/notification.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = new Hono();
@@ -1064,6 +1065,32 @@ app.post('/api/reservation', async (c) => {
             ]
         ) as any;
 
+        // 异步发送留资通知
+        void (async () => {
+            try {
+                let storeName = '';
+                if (normalizedVenueId) {
+                    const [venueRows] = await pool.execute('SELECT name FROM venue WHERE id = ?', [normalizedVenueId]) as any;
+                    if (venueRows.length > 0) {
+                        storeName = venueRows[0].name;
+                    }
+                }
+                await notifyNewLead({
+                    id: result.insertId,
+                    name: name,
+                    phone: mobile,
+                    source: source || '小程序',
+                    type: '门店预约',
+                    weddingDate: wedding_date || '',
+                    tablesCount: tables_count || 0,
+                    store: storeName,
+                    submitTime: new Date()
+                });
+            } catch (notifyErr: any) {
+                log.error({ err: notifyErr }, 'reservation notifications failed');
+            }
+        })();
+
         return c.json({ code: 0, data: { id: result.insertId } });
     } catch (err: any) {
         return jsonErrorResponse(c, err);
@@ -1363,6 +1390,32 @@ app.post('/api/booking', async (c) => {
             ]
         ) as any;
 
+        // 异步发送留资通知
+        void (async () => {
+            try {
+                let storeName = '';
+                if (normalizedVenueId) {
+                    const [venueRows] = await pool.execute('SELECT name FROM venue WHERE id = ?', [normalizedVenueId]) as any;
+                    if (venueRows.length > 0) {
+                        storeName = venueRows[0].name;
+                    }
+                }
+                await notifyNewLead({
+                    id: result.insertId,
+                    name: name,
+                    phone: mobile,
+                    source: source || '小程序',
+                    type: '套餐/案例预约',
+                    weddingDate: normalizedWeddingDate || '',
+                    tablesCount: normalizedTablesCount || 0,
+                    store: storeName,
+                    submitTime: new Date()
+                });
+            } catch (notifyErr: any) {
+                log.error({ err: notifyErr }, 'booking notifications failed');
+            }
+        })();
+
         return c.json({ code: 0, data: { id: result.insertId } });
     } catch (err: any) {
         return jsonErrorResponse(c, err);
@@ -1401,14 +1454,31 @@ app.post('/api3/zhan/xapp/savePhoneData', async (c) => {
         // [CRM FIX] 避免漏斗流失：微盟桥接层一键授权时沉淀进客资数据库
         const safePhone = phone || '';
         if (safePhone) {
-            await pool.execute(
+            const [crmResult] = await pool.execute(
                 `INSERT INTO reservation (name, mobile, source, status, submit_count, created_at, updated_at)
                  VALUES (?, ?, ?, '待跟进', 1, NOW(), NOW())
                  ON DUPLICATE KEY UPDATE
+                     id = LAST_INSERT_ID(id),
                      submit_count = COALESCE(submit_count, 1) + 1,
                      updated_at = NOW()`,
                 ['微信授权用户', safePhone, channel || '微盟一键授权']
-            );
+            ) as any;
+
+            // 异步发送留资通知
+            void (async () => {
+                try {
+                    await notifyNewLead({
+                        id: crmResult.insertId,
+                        name: '微信授权用户',
+                        phone: safePhone,
+                        source: channel || '微盟一键授权',
+                        type: '一键授权留资',
+                        submitTime: new Date()
+                    });
+                } catch (notifyErr: any) {
+                    log.error({ err: notifyErr }, 'savePhoneData notifications failed');
+                }
+            })();
         }
 
         return c.json(weimobOk());
@@ -1462,6 +1532,81 @@ app.post('/api3/zhan/xapp/submit', async (c) => {
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                     [submitId, fieldKey, label, itemMark, mode, valueJson, showValue, i]
                 );
+            }
+        }
+
+        // 3. 提取微盟数据自动存入 CRM 并触发统一留资提醒
+        const extractWeimobData = (fields: any[]) => {
+            let name = '';
+            let weddingDate = '';
+            let store = '';
+            let remark = '';
+            let tablesCount = '';
+            
+            if (Array.isArray(fields)) {
+                for (const item of fields) {
+                    const label = item.label || '';
+                    const val = item.showValue || (typeof item.value === 'string' ? item.value : '') || '';
+                    const mark = item.mark || '';
+                    const key = item.fieldKey || '';
+                    
+                    if (mark === 'name' || key === 'name' || label.includes('姓名') || label.includes('名字')) {
+                        name = val;
+                    } else if (mark === 'weddingDate' || key === 'weddingDate' || label.includes('婚期') || label.includes('日期')) {
+                        weddingDate = val;
+                    } else if (mark === 'store' || key === 'store' || label.includes('意向门店') || label.includes('门店') || label.includes('店铺')) {
+                        store = val;
+                    } else if (label.includes('桌数') || label.includes('桌')) {
+                        tablesCount = val;
+                    } else if (label.includes('备注') || label.includes('需求')) {
+                        remark = val;
+                    }
+                }
+            }
+            return { name, weddingDate, store, remark, tablesCount };
+        };
+
+        const weimobInfo = extractWeimobData(data);
+        const nameVal = weimobInfo.name || '微盟用户';
+        const phoneVal = phone || originPhone || '';
+
+        if (phoneVal) {
+            try {
+                const leadMeta = JSON.stringify({ formId, pageId, submitId });
+                const [crmResult] = await pool.execute(
+                    `INSERT INTO reservation (name, mobile, wedding_date, source, lead_meta, submit_count)
+                     VALUES (?, ?, ?, ?, ?, 1)
+                     ON DUPLICATE KEY UPDATE
+                        id = LAST_INSERT_ID(id),
+                        name = VALUES(name),
+                        wedding_date = IF(VALUES(wedding_date) <> '', VALUES(wedding_date), wedding_date),
+                        lead_meta = VALUES(lead_meta),
+                        submit_count = COALESCE(submit_count, 1) + 1,
+                        updated_at = NOW()`,
+                    [nameVal, phoneVal, weimobInfo.weddingDate || '', '微盟线索提交', leadMeta]
+                ) as any;
+
+                // 异步触发通知
+                void (async () => {
+                    try {
+                        await notifyNewLead({
+                            id: crmResult.insertId,
+                            name: nameVal,
+                            phone: phoneVal,
+                            source: '微盟线索',
+                            type: '三方派单表单',
+                            weddingDate: weimobInfo.weddingDate,
+                            tablesCount: weimobInfo.tablesCount,
+                            store: weimobInfo.store,
+                            remark: weimobInfo.remark,
+                            submitTime: new Date()
+                        });
+                    } catch (notifyErr: any) {
+                        log.error({ err: notifyErr }, 'weimob submit notifications failed');
+                    }
+                })();
+            } catch (crmErr: any) {
+                log.error({ err: crmErr }, 'weimob CRM reservation insertion failed');
             }
         }
 

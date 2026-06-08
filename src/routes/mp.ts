@@ -8,11 +8,10 @@ import { Hono } from 'hono';
 import pool from '../db.js';
 import { appLogger } from '../logger.js';
 import {
-    enqueueAdminNewLeadNotificationTasks,
     enqueueFormSubmitNotificationTask,
     kickMessageTaskWorker,
 } from '../services/message-task.service.js';
-import { notifySalesNewLead } from '../services/sms.service.js';
+import { notifyNewLead } from '../services/notification.service.js';
 import { remember } from '../response-cache.js';
 import { getClientErrorMessage } from '../http-error.js';
 
@@ -302,7 +301,7 @@ mp.post('/packages', async (c) => {
              FROM package p
              LEFT JOIN package_category pc ON p.category_id = pc.id
              WHERE ${where}
-             ORDER BY CASE WHEN p.price IS NULL OR p.price = 0 OR p.price = '' THEN 999999999 ELSE CAST(p.price AS DECIMAL(10,2)) END ASC, p.sort_order ASC, p.id DESC
+             ORDER BY CASE WHEN p.price IS NULL OR p.price <= 0 THEN 999999999 ELSE p.price END ASC, COALESCE(NULLIF(p.sort_order, 0), 999) ASC, p.id DESC
              LIMIT ? OFFSET ?`,
             [...params, Math.min(50, pageSize), offset]
         ) as any;
@@ -671,32 +670,22 @@ mp.post('/submit', async (c) => {
             }
         }
 
-        // 5. 入队管理员订阅消息任务
+        // 5. 调用统一通知服务发送提醒（含服务号模板消息、短信、小程序订阅消息）
         try {
-            await enqueueAdminNewLeadNotificationTasks({
-                submitId,
+            await notifyNewLead({
+                id: submitId,
                 name: nameVal,
                 phone: phoneVal,
+                source: '小程序表单-0305',
+                type: '页面表单留资',
                 store: storeField?.showValue || storeField?.value || '',
-                weddingDate: dateVal
+                weddingDate: dateVal,
+                remark: Array.isArray(fields) ? fields.map((f: any) => `${f.label}: ${f.showValue || f.value || ''}`).join('; ') : '',
+                submitTime: new Date()
             });
-        } catch (adminNotifyErr: any) {
-            log.error({ err: adminNotifyErr }, 'mp submit admin notification failed');
+        } catch (notifyErr: any) {
+            log.error({ err: notifyErr }, 'mp submit unified notification failed');
         }
-
-        // 6. 发送短信通知给销售
-        try {
-            await notifySalesNewLead({
-                name: nameVal,
-                phone: phoneVal,
-                store: storeField?.showValue || storeField?.value || '',
-                weddingDate: dateVal
-            });
-        } catch (smsErr: any) {
-            log.error({ err: smsErr }, 'mp submit sms notification failed');
-        }
-
-        kickMessageTaskWorker();
 
         return c.json(ok({ formId: String(submitId) }));
     } catch (err: any) {
