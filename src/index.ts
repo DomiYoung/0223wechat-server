@@ -1452,7 +1452,17 @@ app.post('/api3/zhan/xapp/savePhoneData', async (c) => {
         );
         
         // [CRM FIX] 避免漏斗流失：微盟桥接层一键授权时沉淀进客资数据库
-        const safePhone = phone || '';
+        let safePhone = phone || '';
+
+        // 尝试从微信 Code 换取真实手机号
+        if (!safePhone && wxDecryptData && wxDecryptData.code) {
+            const { getWechatPhoneNumber } = await import('./services/wechat.service.js');
+            const decryptedPhone = await getWechatPhoneNumber(wxDecryptData.code);
+            if (decryptedPhone) {
+                safePhone = decryptedPhone;
+            }
+        }
+
         if (safePhone) {
             const [crmResult] = await pool.execute(
                 `INSERT INTO reservation (name, mobile, source, status, submit_count, created_at, updated_at)
@@ -1481,7 +1491,7 @@ app.post('/api3/zhan/xapp/savePhoneData', async (c) => {
             })();
         }
 
-        return c.json(weimobOk());
+        return c.json(weimobOk({ phone: safePhone }));
     } catch (err: any) {
         log.error({ err }, 'savePhoneData error');
         return legacyMpError(c, err);

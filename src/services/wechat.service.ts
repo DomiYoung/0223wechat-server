@@ -115,3 +115,26 @@ export async function dispatchWechatSubscribeMessage(
     };
   }
 }
+
+/**
+ * 通过微信手机号授权 Code 换取真实手机号
+ */
+export async function getWechatPhoneNumber(code: string): Promise<string | null> {
+  try {
+    const accessToken = await getAccessToken();
+    const response = await axios.post(
+      `https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=${accessToken}`,
+      { code }
+    );
+    if (response.data.errcode === 0 && response.data.phone_info) {
+      log.info('wechat phone number fetched successfully');
+      return response.data.phone_info.purePhoneNumber || response.data.phone_info.phoneNumber || null;
+    }
+    log.error({ response: response.data, code }, 'failed to fetch phone number from wechat using code');
+    return null;
+  } catch (err: any) {
+    log.error({ err: err.message, code }, 'wechat phone number fetch exception');
+    return null;
+  }
+}
+
