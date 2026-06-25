@@ -66,6 +66,7 @@ async function main() {
   await migratePool.query('ANALYZE TABLE wedding_case, package, venue, case_image, package_image, venue_image');
   log.info('performance indexes migration completed');
   await closeMigratePool();
+  process.exit(0);
 }
 
 main().catch(async (err) => {

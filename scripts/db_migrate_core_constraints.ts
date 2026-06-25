@@ -18,6 +18,7 @@ async function main() {
   await dropLegacyForeignKeys();
   log.info('core relation cleanup and foreign key removal completed');
   await closeMigratePool();
+  process.exit(0);
 }
 
 main().catch(async (err) => {

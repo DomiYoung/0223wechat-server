@@ -15,6 +15,7 @@ async function main() {
   await ensureReservationMobileUnique();
   log.info('reservation.mobile unique ensured');
   await closeMigratePool();
+  process.exit(0);
 }
 
 main().catch(async (err) => {
