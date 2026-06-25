@@ -40,7 +40,8 @@ conn.on('ready', () => {
                 waitForConnections: true,
                 connectionLimit: 1,
             });
-            const [rows] = await pool.execute('SELECT id, title, price, price_label FROM package');
+            const query = process.argv[2] || 'SELECT id, title, price, price_label FROM package LIMIT 10';
+            const [rows] = await pool.execute(query);
             console.table(rows);
             await pool.end();
         } catch (e) {

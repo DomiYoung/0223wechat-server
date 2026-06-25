@@ -98,6 +98,8 @@ export async function sendOfficialAccountTemplateMessage(input: {
       };
     }
 
+    log.info({ payload }, 'Sending Official Account template message payload');
+
     const response = await axios.post(
       `https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=${accessToken}`,
       payload

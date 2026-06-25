@@ -11,8 +11,9 @@
     "migrate:error-log": "tsx scripts/db_migrate_error_log.ts",
     "migrate:message-task": "tsx scripts/db_migrate_message_task.ts",
     "migrate:perf-indexes": "tsx scripts/db_migrate_perf_indexes.ts",
+    "migrate:wx-user-token": "tsx scripts/db_migrate_wx_user_token.ts",
     "oss:cache-control": "tsx scripts/oss_refresh_cache_control.ts --apply",
-    "migrate:all": "npm run migrate:reservation-unique && npm run migrate:core && npm run migrate:error-log && npm run migrate:message-task && npm run migrate:perf-indexes"
+    "migrate:all": "npm run migrate:reservation-unique && npm run migrate:core && npm run migrate:error-log && npm run migrate:message-task && npm run migrate:perf-indexes && npm run migrate:wx-user-token"
   },
   "dependencies": {
     "@alicloud/dysmsapi20170525": "^4.5.0",
@@ -27,7 +28,8 @@
     "multer": "^2.1.1",
     "mysql2": "^3.17.4",
     "pino": "^10.3.1",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "ssh2": "^1.17.0"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
