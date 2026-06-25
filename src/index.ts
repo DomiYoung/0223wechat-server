@@ -438,26 +438,53 @@ app.post('/api/wx/login', async (c) => {
             return c.json({ error: data.errmsg || '微信登录失败' }, 400);
         }
 
-        // 1. 写入/更新 wx_user 表（UPSERT by openid）
+        // 生成持久化的自签 token，有效期 30 天（替代微信原生短命 session_key）
+        const crypto = await import('crypto');
+        const selfToken = crypto.randomBytes(32).toString('hex');
+        const tokenExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 天后
+
+        // 1. 写入/更新 wx_user 表（UPSERT by openid），并存储新 token
         if (data.openid) {
             try {
                 await pool.execute(
-                    `INSERT INTO wx_user (openid)
-                     VALUES (?)
-                     ON DUPLICATE KEY UPDATE updated_at = NOW()`,
-                    [data.openid]
+                    `INSERT INTO wx_user (openid, token, token_expires_at)
+                     VALUES (?, ?, ?)
+                     ON DUPLICATE KEY UPDATE
+                       token = VALUES(token),
+                       token_expires_at = VALUES(token_expires_at),
+                       updated_at = NOW()`,
+                    [data.openid, selfToken, tokenExpiresAt]
                 );
-                log.info({ openid: data.openid }, 'wx_user upserted');
+                log.info({ openid: data.openid }, 'wx_user upserted with persistent token');
             } catch (dbErr) {
-                // wx_user 写入失败不阻塞登录
-                log.warn({ openid: data.openid, err: dbErr }, 'wx_user upsert failed (non-blocking)');
+                // 列不存在则降级：只做基础 upsert，不存 token
+                try {
+                    await pool.execute(
+                        `INSERT INTO wx_user (openid)
+                         VALUES (?)
+                         ON DUPLICATE KEY UPDATE updated_at = NOW()`,
+                        [data.openid]
+                    );
+                } catch (fallbackErr) {
+                    log.warn({ openid: data.openid, err: fallbackErr }, 'wx_user upsert failed (non-blocking)');
+                }
+                log.warn({ err: dbErr }, 'token column may not exist, falling back to session_key');
+                // 降级到返回 session_key（旧库兼容）
+                return c.json({
+                    code: 0,
+                    data: {
+                        session_key: data.session_key,
+                        openid: data.openid
+                    }
+                });
             }
         }
 
         return c.json({
             code: 0,
             data: {
-                session_key: data.session_key,
+                token: selfToken,           // 自签持久 token，30 天有效
+                session_key: data.session_key, // 保留用于后续手机号解密
                 openid: data.openid
             }
         });
