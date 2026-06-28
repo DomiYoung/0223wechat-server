@@ -1499,7 +1499,7 @@ app.post('/api3/zhan/xapp/savePhoneData', async (c) => {
                      id = LAST_INSERT_ID(id),
                      submit_count = COALESCE(submit_count, 1) + 1,
                      updated_at = NOW()`,
-                ['微信授权用户', safePhone, channel || '小程序一键授权']
+                ['新客户', safePhone, channel || '小程序一键授权']
             ) as any;
 
             // 异步发送留资通知
@@ -1507,7 +1507,7 @@ app.post('/api3/zhan/xapp/savePhoneData', async (c) => {
                 try {
                     await notifyNewLead({
                         id: crmResult.insertId,
-                        name: '微信授权用户',
+                        name: '新客户',
                         phone: safePhone,
                         source: channel || '小程序一键授权',
                         type: '一键授权留资',
