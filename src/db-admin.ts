@@ -552,8 +552,8 @@ export async function initDB(ddlPool?: mysql.Pool) {
 
         const venues = [
             { name: '嘉美麓德·上海总店', city: '上海', address: '上海市地址填写处', phone: '021-12345678' },
-            { name: '嘉美麓德·漕河泾臻选店', city: '上海', address: '上海市地址填写处', phone: '021-12345678' },
-            { name: '嘉美麓德·旗舰店', city: '上海', address: '上海市地址填写处', phone: '021-12345678' },
+            { name: '嘉美麓德·漕河泾臻选店', city: '上海', address: '上海市地址填写处', phone: '13062750051' },
+            { name: '嘉美麓德·旗舰店', city: '上海', address: '上海市地址填写处', phone: '13122860273' },
         ];
         for (const v of venues) {
             await db.execute(
