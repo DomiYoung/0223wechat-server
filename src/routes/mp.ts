@@ -581,12 +581,20 @@ mp.post('/submit', async (c) => {
         const { formId, pageId, phone, data: fields } = body;
 
         const nameField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'name' || f.mark === 'name') : null;
+        const salutationField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'salutation' || f.mark === 'salutation') : null;
         const phoneField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'phone' || f.mark === 'phone') : null;
         const dateField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'weddingDate' || f.mark === 'weddingDate') : null;
+        const periodField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'weddingPeriod' || f.mark === 'weddingPeriod') : null;
         const storeField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'store' || f.mark === 'store') : null;
-        const nameVal = nameField?.showValue || nameField?.value || '';
+        const categoryField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'category' || f.mark === 'category') : null;
+        const tablesField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'tables' || f.mark === 'tables') : null;
+        const hallField = Array.isArray(fields) ? fields.find((f: any) => f.fieldKey === 'hallName' || f.mark === 'hallName') : null;
+
+        const rawName = nameField?.showValue || nameField?.value || '';
+        const salutation = salutationField?.showValue || salutationField?.value || '';
+        const nameVal = rawName ? (salutation ? `${rawName}${salutation}` : rawName) : (salutation || '客户');
         const phoneVal = phoneField?.showValue || phoneField?.value || phone || '';
-        const dateVal = dateField?.showValue || dateField?.value || '';
+        const dateVal = dateField?.showValue || dateField?.value || periodField?.showValue || periodField?.value || '';
         const openId = body.openId || '';
         const conn = await pool.getConnection();
         let submitId = 0;
@@ -680,6 +688,9 @@ mp.post('/submit', async (c) => {
                 type: '页面表单留资',
                 store: storeField?.showValue || storeField?.value || '',
                 weddingDate: dateVal,
+                tablesCount: tablesField?.showValue || tablesField?.value || '',
+                category: categoryField?.showValue || categoryField?.value || '',
+                hallName: hallField?.showValue || hallField?.value || '',
                 remark: Array.isArray(fields) ? fields.map((f: any) => `${f.label}: ${f.showValue || f.value || ''}`).join('; ') : '',
                 submitTime: new Date()
             });

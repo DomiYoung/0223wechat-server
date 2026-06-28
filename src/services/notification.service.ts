@@ -14,6 +14,8 @@ export interface LeadNotificationData {
   store?: string;
   weddingDate?: string;
   tablesCount?: number | string;
+  category?: string;
+  hallName?: string;
   remark?: string;
   submitTime?: Date;
 }

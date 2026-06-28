@@ -1581,6 +1581,8 @@ app.post('/api3/zhan/xapp/submit', async (c) => {
             let store = '';
             let remark = '';
             let tablesCount = '';
+            let category = '';
+            let hallName = '';
             
             if (Array.isArray(fields)) {
                 for (const item of fields) {
@@ -1601,10 +1603,14 @@ app.post('/api3/zhan/xapp/submit', async (c) => {
                         tablesCount = val;
                     } else if (label.includes('备注') || label.includes('需求')) {
                         remark = val;
+                    } else if (mark === 'category' || key === 'category' || label.includes('宴会类型')) {
+                        category = val;
+                    } else if (mark === 'hallName' || key === 'hallName' || label.includes('意向宴会厅')) {
+                        hallName = val;
                     }
                 }
             }
-            return { name, weddingDate: weddingDate || weddingPeriod || '', store, remark, tablesCount };
+            return { name, weddingDate: weddingDate || weddingPeriod || '', store, remark, tablesCount, category, hallName };
         };
 
         const weimobInfo = extractWeimobData(data);
@@ -1638,6 +1644,8 @@ app.post('/api3/zhan/xapp/submit', async (c) => {
                             type: '三方派单表单',
                             weddingDate: weimobInfo.weddingDate,
                             tablesCount: weimobInfo.tablesCount,
+                            category: weimobInfo.category,
+                            hallName: weimobInfo.hallName,
                             store: weimobInfo.store,
                             remark: weimobInfo.remark,
                             submitTime: new Date()

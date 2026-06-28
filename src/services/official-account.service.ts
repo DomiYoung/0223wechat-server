@@ -135,6 +135,8 @@ export async function notifySalesViaOfficialAccount(lead: {
   store?: string;
   weddingDate?: string;
   tablesCount?: number | string;
+  category?: string;
+  hallName?: string;
   remark?: string;
   submitTime?: Date;
 }): Promise<number> {
@@ -157,11 +159,21 @@ export async function notifySalesViaOfficialAccount(lead: {
 
   const timeStr = formatTime(lead.submitTime || new Date());
 
-  // 拼装客户预约意向（婚期 + 桌数），让销售直接可见
+  // 拼装客户预约意向（分类/宴会厅 + 婚期 + 桌数），让销售直接可见
   let intentStr = '';
-  if (lead.weddingDate) intentStr += lead.weddingDate;
+  if (lead.category) {
+    intentStr += lead.category;
+  }
+  if (lead.hallName) {
+    intentStr += (intentStr ? '-' : '') + lead.hallName;
+  }
+  if (lead.weddingDate) {
+    intentStr += (intentStr ? '/' : '') + lead.weddingDate;
+  }
   if (lead.tablesCount) {
-    intentStr += (intentStr ? '/' : '') + lead.tablesCount + '桌';
+    const tablesStr = String(lead.tablesCount);
+    const suffix = tablesStr.includes('桌') ? '' : '桌';
+    intentStr += (intentStr ? '/' : '') + tablesStr + suffix;
   }
   if (!intentStr) intentStr = lead.source || '在线预约';
 
