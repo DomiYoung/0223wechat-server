@@ -1499,7 +1499,7 @@ app.post('/api3/zhan/xapp/savePhoneData', async (c) => {
                      id = LAST_INSERT_ID(id),
                      submit_count = COALESCE(submit_count, 1) + 1,
                      updated_at = NOW()`,
-                ['微信授权用户', safePhone, channel || '微盟一键授权']
+                ['微信授权用户', safePhone, channel || '小程序一键授权']
             ) as any;
 
             // 异步发送留资通知
@@ -1509,7 +1509,7 @@ app.post('/api3/zhan/xapp/savePhoneData', async (c) => {
                         id: crmResult.insertId,
                         name: '微信授权用户',
                         phone: safePhone,
-                        source: channel || '微盟一键授权',
+                        source: channel || '小程序一键授权',
                         type: '一键授权留资',
                         submitTime: new Date()
                     });
@@ -1614,7 +1614,7 @@ app.post('/api3/zhan/xapp/submit', async (c) => {
         };
 
         const weimobInfo = extractWeimobData(data);
-        const nameVal = weimobInfo.name || '微盟用户';
+        const nameVal = weimobInfo.name || '小程序用户';
         const phoneVal = phone || originPhone || '';
 
         if (phoneVal) {
@@ -1630,7 +1630,7 @@ app.post('/api3/zhan/xapp/submit', async (c) => {
                         lead_meta = VALUES(lead_meta),
                         submit_count = COALESCE(submit_count, 1) + 1,
                         updated_at = NOW()`,
-                    [nameVal, phoneVal, weimobInfo.weddingDate || '', '微盟线索提交', leadMeta]
+                    [nameVal, phoneVal, weimobInfo.weddingDate || '', '小程序线索提交', leadMeta]
                 ) as any;
 
                 // 异步触发通知
@@ -1640,8 +1640,8 @@ app.post('/api3/zhan/xapp/submit', async (c) => {
                             id: crmResult.insertId,
                             name: nameVal,
                             phone: phoneVal,
-                            source: '微盟线索',
-                            type: '三方派单表单',
+                            source: '小程序线索',
+                            type: '小程序表单留资',
                             weddingDate: weimobInfo.weddingDate,
                             tablesCount: weimobInfo.tablesCount,
                             category: weimobInfo.category,
